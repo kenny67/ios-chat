@@ -27,7 +27,24 @@
     [self.view addSubview:pcView];
     
     UILabel *label = [[UILabel alloc] initWithFrame:CGRectMake((width - 200)/2, 320, 200, 16)];
-    [label setText:@"确认电脑登陆"];
+    switch (self.platform) {
+        case PlatformType_Windows:
+            [label setText:@"确认 Windows 登陆"];
+            break;
+        case PlatformType_OSX:
+            [label setText:@"确认 Mac 登陆"];
+            break;
+        case PlatformType_WEB:
+            [label setText:@"确认浏览器登陆"];
+            break;
+        case Platform_Linux:
+            [label setText:@"确认 Linux 登陆"];
+            break;
+        default:
+            [label setText:@"确认电脑登陆"];
+            break;
+    }
+    
     [label setTextAlignment:NSTextAlignmentCenter];
     [self.view addSubview:label];
     
@@ -41,14 +58,32 @@
     UIButton *cancelBtn = [[UIButton alloc] initWithFrame:CGRectMake(100, height - 90, width - 200, 40)];
     [cancelBtn setTitle:@"取消登陆" forState:UIControlStateNormal];
     [cancelBtn setTitleColor:[UIColor grayColor] forState:UIControlStateNormal];
+    [cancelBtn addTarget:self action:@selector(onLoginCancel:) forControlEvents:UIControlEventTouchUpInside];
+    
+    UIButton *closeBtn = [[UIButton alloc] initWithFrame:CGRectMake(12, 12, 40, 40)];
+    [closeBtn setTitle:@"关闭" forState:UIControlStateNormal];
+    [closeBtn setTitleColor:[UIColor grayColor] forState:UIControlStateNormal];
+    [closeBtn addTarget:self action:@selector(onClose:) forControlEvents:UIControlEventTouchUpInside];
     
     [self.view addSubview:loginBtn];
     [self.view addSubview:cancelBtn];
+    [self.view addSubview:closeBtn];
+    
     [self notifyScaned];
 }
 
 - (void)onLoginBtn:(id)sender {
     [self confirmLogin];
+}
+
+- (void)onLoginCancel:(id)sender {
+    [[AppService sharedAppService] pcCancelLogin:self.sessionId success:nil error:nil];
+    
+    [self dismissViewControllerAnimated:YES completion:nil];
+}
+
+- (void)onClose:(id)sender {
+    [self dismissViewControllerAnimated:YES completion:nil];
 }
 
 - (void)notifyScaned {
@@ -85,7 +120,7 @@
         
         __weak typeof(self)ws = self;
         [hud setCompletionBlock:^{
-            [ws.navigationController popViewControllerAnimated:YES];
+            [ws dismissViewControllerAnimated:YES completion:nil];
         }];
         [hud hideAnimated:YES afterDelay:1.f];
     }

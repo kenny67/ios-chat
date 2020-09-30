@@ -58,7 +58,7 @@ NSString *kChannelInfoUpdated = @"kChannelInfoUpdated";
 @end
 
 @protocol RefreshFriendRequestDelegate <NSObject>
-- (void)onFriendRequestUpdated;
+- (void)onFriendRequestUpdated:(NSArray<NSString *> *)newFriendRequests;
 @end
 
 @protocol RefreshSettingDelegate <NSObject>
@@ -121,26 +121,44 @@ public:
     id<ReceiveMessageDelegate> m_delegate;
 };
 
+class CONFCB : public mars::stn::ConferenceEventCallback {
+public:
+  CONFCB(id<ConferenceEventDelegate> delegate) : m_delegate(delegate) {
+  }
+  void onConferenceEvent(const std::string &event) {
+    if (m_delegate) {
+        [m_delegate onConferenceEvent:[NSString stringWithUTF8String:event.c_str()]];
+    }
+  }
+    
+  id<ConferenceEventDelegate> m_delegate;
+};
+
+
 WFCCUserInfo* convertUserInfo(const mars::stn::TUserInfo &tui) {
     WFCCUserInfo *userInfo = [[WFCCUserInfo alloc] init];
     userInfo.userId = [NSString stringWithUTF8String:tui.uid.c_str()];
     userInfo.name = [NSString stringWithUTF8String:tui.name.c_str()];
     userInfo.portrait = [NSString stringWithUTF8String:tui.portrait.c_str()];
     
-    userInfo.displayName = [NSString stringWithUTF8String:tui.displayName.c_str()];
-    userInfo.gender = tui.gender;
-    userInfo.social = [NSString stringWithUTF8String:tui.social.c_str()];
-    userInfo.mobile = [NSString stringWithUTF8String:tui.mobile.c_str()];
-    userInfo.email = [NSString stringWithUTF8String:tui.email.c_str()];
-    userInfo.address = [NSString stringWithUTF8String:tui.address.c_str()];
-    userInfo.company = [NSString stringWithUTF8String:tui.company.c_str()];
-    userInfo.social = [NSString stringWithUTF8String:tui.social.c_str()];
-    userInfo.extra = [NSString stringWithUTF8String:tui.extra.c_str()];
+    userInfo.deleted = tui.deleted;
+    if (tui.deleted) {
+        userInfo.displayName = @"已删除用户";
+    } else {
+        userInfo.displayName = [NSString stringWithUTF8String:tui.displayName.c_str()];
+        userInfo.gender = tui.gender;
+        userInfo.social = [NSString stringWithUTF8String:tui.social.c_str()];
+        userInfo.mobile = [NSString stringWithUTF8String:tui.mobile.c_str()];
+        userInfo.email = [NSString stringWithUTF8String:tui.email.c_str()];
+        userInfo.address = [NSString stringWithUTF8String:tui.address.c_str()];
+        userInfo.company = [NSString stringWithUTF8String:tui.company.c_str()];
+        userInfo.social = [NSString stringWithUTF8String:tui.social.c_str()];
+    }
     userInfo.friendAlias = [NSString stringWithUTF8String:tui.friendAlias.c_str()];
     userInfo.groupAlias = [NSString stringWithUTF8String:tui.groupAlias.c_str()];
+    userInfo.extra = [NSString stringWithUTF8String:tui.extra.c_str()];
     userInfo.updateDt = tui.updateDt;
     userInfo.type = tui.type;
-    userInfo.deleted = tui.deleted;
     
     return userInfo;
 }
@@ -249,7 +267,7 @@ public:
 class GFLCB : public mars::stn::GetMyFriendsCallback {
 public:
     GFLCB(id<RefreshFriendListDelegate> delegate) : m_delegate(delegate) {}
-    void onSuccess(std::list<std::string> friendIdList) {
+    void onSuccess(const std::list<std::string> &friendIdList) {
         if(m_delegate) {
             [m_delegate onFriendListUpdated];
         }
@@ -263,9 +281,14 @@ public:
 class GFRCB : public mars::stn::GetFriendRequestCallback {
 public:
     GFRCB(id<RefreshFriendRequestDelegate> delegate) : m_delegate(delegate) {}
-    void onSuccess(bool hasNewRequest) {
-        if(m_delegate && hasNewRequest) {
-            [m_delegate onFriendRequestUpdated];
+    void onSuccess(const std::list<std::string> &newRequests) {
+        if(m_delegate) {
+            NSMutableArray *requests = [[NSMutableArray alloc] init];
+            for (std::list<std::string>::const_iterator it = newRequests.begin(); it != newRequests.end(); ++it) {
+                NSString *r = [NSString stringWithUTF8String:it->c_str()];
+                [requests addObject:r];
+            }
+            [m_delegate onFriendRequestUpdated:requests];
         }
     }
     void onFalure(int errorCode) {
@@ -290,7 +313,7 @@ public:
 
 
 
-@interface WFCCNetworkService () <ConnectionStatusDelegate, ReceiveMessageDelegate, RefreshUserInfoDelegate, RefreshGroupInfoDelegate, WFCCNetworkStatusDelegate, RefreshFriendListDelegate, RefreshFriendRequestDelegate, RefreshSettingDelegate, RefreshChannelInfoDelegate, RefreshGroupMemberDelegate>
+@interface WFCCNetworkService () <ConnectionStatusDelegate, ReceiveMessageDelegate, RefreshUserInfoDelegate, RefreshGroupInfoDelegate, WFCCNetworkStatusDelegate, RefreshFriendListDelegate, RefreshFriendRequestDelegate, RefreshSettingDelegate, RefreshChannelInfoDelegate, RefreshGroupMemberDelegate, ConferenceEventDelegate>
 @property(nonatomic, assign)ConnectionStatus currentConnectionStatus;
 @property (nonatomic, strong)NSString *userId;
 @property (nonatomic, strong)NSString *passwd;
@@ -301,11 +324,14 @@ public:
 @property(nonatomic, strong)NSTimer *forceConnectTimer;
 @property(nonatomic, strong)NSTimer *suspendTimer;
 @property(nonatomic, strong)NSTimer *endBgTaskTimer;
-@property(nonatomic, strong)NSString *backupDeviceToken;
-@property(nonatomic, strong)NSString *backupVoipDeviceToken;
+@property(nonatomic, strong)NSString *deviceToken;
+@property(nonatomic, strong)NSString *voipDeviceToken;
 
 @property(nonatomic, assign)BOOL requestProxying;
 @property(nonatomic, strong) NSMutableArray *messageFilterList;
+
+@property(nonatomic, assign)BOOL deviceTokenUploaded;
+@property(nonatomic, assign)BOOL voipDeviceTokenUploaded;
 - (void)reportEvent_OnForeground:(BOOL)isForeground;
 
 @property(nonatomic, assign)NSUInteger backgroudRunTime;
@@ -416,7 +442,12 @@ static WFCCNetworkService * sharedSingleton = nil;
             [self.receiveMessageDelegate onMessageDelivered:delivereds];
         }
     });
-    
+}
+
+- (void)onConferenceEvent:(NSString *)event {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self.conferenceEventDelegate onConferenceEvent:event];
+    });
 }
 
 - (void)addReceiveMessageFilter:(id<ReceiveMessageFilter>)filter {
@@ -456,12 +487,12 @@ static WFCCNetworkService * sharedSingleton = nil;
   dispatch_async(dispatch_get_main_queue(), ^{
     self.currentConnectionStatus = status;
     if (status == kConnectionStatusConnected) {
-        if (self.backupDeviceToken.length) {
-            [self setDeviceToken:self.backupDeviceToken];
+        if (self.deviceToken.length && !self.deviceTokenUploaded) {
+            [self setDeviceToken:self.deviceToken];
         }
         
-        if (self.backupVoipDeviceToken.length) {
-            [self setVoipDeviceToken:self.backupVoipDeviceToken];
+        if (self.voipDeviceToken.length && !self.voipDeviceTokenUploaded) {
+            [self setVoipDeviceToken:self.voipDeviceToken];
         }
     }
   });
@@ -573,8 +604,8 @@ static WFCCNetworkService * sharedSingleton = nil;
       if ((mars::stn::GetTaskCount() > 0 && self.backgroudRunTime < 60) || (inCall && self.backgroudRunTime < 1800)) {
           [self checkBackGroundTask];
       } else {
-    mars::stn::Reset();
-    _endBgTaskTimer = [NSTimer scheduledTimerWithTimeInterval:1
+          mars::stn::ClearTasks();
+          _endBgTaskTimer = [NSTimer scheduledTimerWithTimeInterval:1
                                                        target:self
                                                      selector:@selector(endBgTask)
                                                      userInfo:nil
@@ -627,6 +658,7 @@ static WFCCNetworkService * sharedSingleton = nil;
   mars::app::SetCallback(mars::app::AppCallBack::Instance());
   mars::stn::setConnectionStatusCallback(new CSCB(self));
   mars::stn::setReceiveMessageCallback(new RPCB(self));
+    mars::stn::setConferenceEventCallback(new CONFCB(self));
   mars::stn::setRefreshUserInfoCallback(new GUCB(self));
   mars::stn::setRefreshGroupInfoCallback(new GGCB(self));
     mars::stn::setRefreshGroupMemberCallback(new GGMCB(self));
@@ -708,6 +740,8 @@ static WFCCNetworkService * sharedSingleton = nil;
     }
     
   _logined = YES;
+    self.deviceTokenUploaded = NO;
+    self.voipDeviceTokenUploaded = NO;
     mars::app::AppCallBack::Instance()->SetAccountUserName([userId UTF8String]);
     [self createMars];
     self.userId = userId;
@@ -723,6 +757,10 @@ static WFCCNetworkService * sharedSingleton = nil;
 }
 
 - (void)disconnect:(BOOL)disablePush clearSession:(BOOL)clearSession {
+    if(!_logined) {
+        return;
+    }
+    
     _logined = NO;
     self.userId = nil;
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -764,18 +802,21 @@ static WFCCNetworkService * sharedSingleton = nil;
 }
 
 - (void)setDeviceToken:(NSString *)token {
-  if (token.length == 0) {
-    return;
-  }
-  
-  if (!self.isLogined || self.currentConnectionStatus != kConnectionStatusConnected) {
-    self.backupDeviceToken = token;
-    return;
-  }
+    if (token.length == 0) {
+        return;
+    }
+
+    _deviceToken = token;
+
+    if (!self.isLogined || self.currentConnectionStatus != kConnectionStatusConnected) {
+        self.deviceTokenUploaded = NO;
+        return;
+    }
   
     NSString *appName =
     [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleIdentifier"];
     mars::stn::setDeviceToken([appName UTF8String], [token UTF8String], mars::app::AppCallBack::Instance()->GetPushType());
+    self.deviceTokenUploaded =YES;
 }
 
 - (void)setVoipDeviceToken:(NSString *)token {
@@ -783,14 +824,17 @@ static WFCCNetworkService * sharedSingleton = nil;
         return;
     }
     
+    _voipDeviceToken = token;
+    
     if (!self.isLogined || self.currentConnectionStatus != kConnectionStatusConnected) {
-        self.backupVoipDeviceToken = token;
+        self.voipDeviceTokenUploaded = NO;
         return;
     }
     
     NSString *appName =
     [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleIdentifier"];
     mars::stn::setDeviceToken([appName UTF8String], [token UTF8String], 2);
+    self.voipDeviceTokenUploaded = YES;
 }
 
 - (NSString *)encodedCid {
@@ -832,9 +876,9 @@ static WFCCNetworkService * sharedSingleton = nil;
     });
 }
 
-- (void)onFriendRequestUpdated {
+- (void)onFriendRequestUpdated:(NSArray<NSString *> *)newFriendRequests {
     dispatch_async(dispatch_get_main_queue(), ^{
-        [[NSNotificationCenter defaultCenter] postNotificationName:kFriendRequestUpdated object:nil];
+        [[NSNotificationCenter defaultCenter] postNotificationName:kFriendRequestUpdated object:newFriendRequests];
     });
 }
 

@@ -16,6 +16,7 @@
 #import <WFMomentClient/WFMomentClient.h>
 #import <WFMomentUIKit/WFMomentUIKit.h>
 #endif
+#import <WFAVEngineKit/WFAVEngineKit.h>
 #import "UIFont+YH.h"
 #import "UIColor+YH.h"
 
@@ -42,6 +43,10 @@
         self.hasMoments = YES;
     } else {
         self.hasMoments = NO;
+    }
+    
+    if ([WFAVEngineKit sharedEngineKit].supportConference) {
+        [self.dataSource addObject:@{@"title":@"Conference",@"image":@"discover_conference",@"des":@"Conference"}];
     }
     
     self.tableView = [[UITableView alloc] initWithFrame:CGRectMake(0, 0, self.view.frame.size.width, self.view.frame.size.height) style:UITableViewStylePlain];
@@ -137,6 +142,12 @@
     
     if ([des isEqualToString:@"Things"]) {
         DeviceTableViewController *vc = [[DeviceTableViewController alloc] init];
+        vc.hidesBottomBarWhenPushed = YES;
+        [self.navigationController pushViewController:vc animated:YES];
+    }
+    
+    if ([des isEqualToString:@"Conference"]) {
+        WFCUCreateConferenceViewController *vc = [[WFCUCreateConferenceViewController alloc] init];
         vc.hidesBottomBarWhenPushed = YES;
         [self.navigationController pushViewController:vc animated:YES];
     }

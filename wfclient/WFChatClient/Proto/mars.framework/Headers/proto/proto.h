@@ -41,6 +41,7 @@
 #define MESSAGE_CONTENT_TYPE_CHANGE_SEARCHABLE 116
 #define MESSAGE_CONTENT_TYPE_SET_MANAGER 117
 #define MESSAGE_CONTENT_TYPE_MUTE_MEMBER 118
+#define MESSAGE_CONTENT_TYPE_ALLOW_MEMBER 119
 
 
 
@@ -263,6 +264,7 @@ namespace mars{
             type(c.type),
             searchableContent(c.searchableContent),
             pushContent(c.pushContent),
+            pushData(c.pushData),
             content(c.content),
             binaryContent(c.binaryContent),
             localContent(c.localContent),
@@ -277,6 +279,7 @@ namespace mars{
                 type = c.type;
                 searchableContent = c.searchableContent;
                 pushContent = c.pushContent;
+                pushData = c.pushData;
                 content = c.content;
                 binaryContent = c.binaryContent;
                 localContent = c.localContent;
@@ -291,6 +294,7 @@ namespace mars{
             int type;
             std::string searchableContent;
             std::string pushContent;
+            std::string pushData;
             std::string content;
             std::string binaryContent;
             std::string localContent;
@@ -434,6 +438,7 @@ namespace mars{
             kUserSettingConversationReaded = 11,
             kUserSettingWebOnline = 12,
             kUserSettingDisableRecipt = 13,
+            kUserSettingFavouriteUser = 14,
 
             kUserSettingCustomBegin = 1000
         };
@@ -474,6 +479,26 @@ namespace mars{
             std::string userId;
             int64_t rcvdDt;
             virtual ~TDeliveryEntry(){}
+#if WFCHAT_PROTO_SERIALIZABLE
+            virtual void Serialize(void *writer) const;
+            virtual void Unserialize(const Value& value);
+#endif //WFCHAT_PROTO_SERIALIZABLE
+        };
+    
+        class TFileRecord : public TSerializable {
+        public:
+            TFileRecord() : messageUid(0),conversationType(0), line(0),size(0),downloadCount(0), timestamp(0)  {}
+            int64_t messageUid;
+            std::string userId;
+            int conversationType;
+            std::string target;
+            int line;
+            std::string name;
+            std::string url;
+            int size;
+            int downloadCount;
+            long long timestamp;
+            virtual ~TFileRecord(){}
 #if WFCHAT_PROTO_SERIALIZABLE
             virtual void Serialize(void *writer) const;
             virtual void Unserialize(const Value& value);
@@ -555,6 +580,13 @@ namespace mars{
             virtual void onFalure(int errorCode) = 0;
             virtual ~LoadRemoteMessagesCallback() {}
         };
+    
+        class LoadFileRecordCallback {
+        public:
+            virtual void onSuccess(const std::list<TFileRecord> &fileList) = 0;
+            virtual void onFalure(int errorCode) = 0;
+            virtual ~LoadFileRecordCallback() {}
+        };
 
         class GetChatroomInfoCallback {
         public:
@@ -601,14 +633,14 @@ namespace mars{
 
         class GetMyFriendsCallback {
         public:
-            virtual void onSuccess(std::list<std::string> friendIdList) = 0;
+            virtual void onSuccess(const std::list<std::string> &friendIdList) = 0;
             virtual void onFalure(int errorCode) = 0;
             virtual ~GetMyFriendsCallback() {}
         };
 
         class GetFriendRequestCallback {
         public:
-            virtual void onSuccess(bool hasNewRequest) = 0;
+            virtual void onSuccess(const std::list<std::string> &newRequests) = 0;
             virtual void onFalure(int errorCode) = 0;
             virtual ~GetFriendRequestCallback() {}
         };
@@ -660,6 +692,11 @@ namespace mars{
             virtual void onUserReceivedMessage(const std::map<std::string, int64_t> &userReceived) = 0;
             virtual void onUserReadedMessage(const std::list<TReadEntry> &userReceived) = 0;
         };
+    
+        class ConferenceEventCallback {
+        public:
+            virtual void onConferenceEvent(const std::string &event) = 0;
+        };
 
         extern bool setAuthInfo(const std::string &userId, const std::string &token);
         extern void Disconnect(uint8_t flag);
@@ -667,6 +704,7 @@ namespace mars{
         extern void AppWillTerminate();
         extern void setConnectionStatusCallback(ConnectionStatusCallback *callback);
         extern void setReceiveMessageCallback(ReceiveMessageCallback *callback);
+        extern void setConferenceEventCallback(ConferenceEventCallback *callback);
     
         extern void setDNSResult(std::vector<std::string> serverIPs);
         extern void setRefreshUserInfoCallback(GetUserInfoCallback *callback);
@@ -696,9 +734,13 @@ namespace mars{
 
         extern void loadRemoteLineMessages(int type, long long beforeUid, int count, LoadRemoteMessagesCallback *callback);
 
+        extern void loadConversationFileRecords(const TConversation &conv, long long beforeUid, int count, LoadFileRecordCallback *callback);
+        extern void loadMyFileRecords(long long beforeUid, int count, LoadFileRecordCallback *callback);
+        extern void deleteFileRecords(long long messageUid, GeneralOperationCallback *callback);
+    
         extern int uploadGeneralMedia(const std::string fileName, const std::string &mediaData, int mediaType, UpdateMediaCallback *callback);
 
-        extern void getAuthorizedMediaUrl(int mediaType, const std::string &mediaUrl, GeneralStringCallback *callback);
+        extern void getAuthorizedMediaUrl(long long messageUid, int mediaType, const std::string &mediaUrl, GeneralStringCallback *callback);
 
         extern int modifyMyInfo(const std::list<std::pair<int, std::string>> &infos, GeneralOperationCallback *callback);
 
@@ -737,7 +779,7 @@ namespace mars{
 
         extern void SetGroupManager(const std::string &groupId, const std::list<std::string> userIds, int setOrDelete, const std::list<int> &notifyLines, TMessageContent &content, GeneralOperationCallback *callback);
     
-        extern void MuteGroupMember(const std::string &groupId, const std::list<std::string> userIds, int setOrDelete, const std::list<int> &notifyLines, TMessageContent &content, GeneralOperationCallback *callback);
+        extern void MuteOrAllowGroupMember(const std::string &groupId, const std::list<std::string> userIds, int setOrDelete, bool isAllow, const std::list<int> &notifyLines, TMessageContent &content, GeneralOperationCallback *callback);
 
         extern void (*getUserInfo)(const std::list<std::pair<std::string, int64_t>> &userReqList, GetUserInfoCallback *callback);
 
@@ -778,7 +820,9 @@ namespace mars{
 
         extern bool IsCommercialServer();
         extern bool IsReceiptEnabled();
-
+    
+    extern void sendConferenceRequest(int64_t sessionId, const std::string &roomId, const std::string &request, const std::string &data, GeneralStringCallback *callback);
+    
         extern bool filesystem_exists(const std::string &path);
 		extern bool filesystem_create_directories(const std::string &path);
         extern bool filesystem_copy_file(const std::string &source, const std::string &dest, bool overwrite);

@@ -28,7 +28,9 @@
 #import "DNImagePickerController.h"
 #import "DNAsset.h"
 #import <Photos/Photos.h>
-
+#import "WFCUShareMessageView.h"
+#import "TYAlertController.h"
+#import "UIView+TYAlertView.h"
 
 #define CHAT_INPUT_BAR_PADDING 8
 #define CHAT_INPUT_BAR_ICON_SIZE (CHAT_INPUT_BAR_HEIGHT - CHAT_INPUT_BAR_PADDING - CHAT_INPUT_BAR_PADDING)
@@ -48,7 +50,7 @@
 //@implementation TextInfo
 //
 //@end
-@interface WFCUChatInputBar () <UITextViewDelegate, WFCUFaceBoardDelegate, UIImagePickerControllerDelegate, AVAudioRecorderDelegate, AVAudioPlayerDelegate, WFCUPluginBoardViewDelegate, UIImagePickerControllerDelegate, LocationViewControllerDelegate, UIActionSheetDelegate, KZVideoViewControllerDelegate, DNImagePickerControllerDelegate>
+@interface WFCUChatInputBar () <UITextViewDelegate, WFCUFaceBoardDelegate, UIImagePickerControllerDelegate, AVAudioRecorderDelegate, AVAudioPlayerDelegate, WFCUPluginBoardViewDelegate, UIImagePickerControllerDelegate, LocationViewControllerDelegate, UIActionSheetDelegate, KZVideoViewControllerDelegate, DNImagePickerControllerDelegate, UIDocumentPickerDelegate>
 
 @property (nonatomic, assign)BOOL textInput;
 @property (nonatomic, assign)BOOL voiceInput;
@@ -1003,16 +1005,83 @@
         [actionSheet showInView:self.parentView];
 #endif
     } else if(itemTag == 5) {
-        WFCUSelectFileViewController *sfvc = [[WFCUSelectFileViewController alloc] init];
-        UINavigationController *navi = [[UINavigationController alloc] initWithRootViewController:sfvc];
-        __weak typeof(self) ws = self;
-        sfvc.selectResult = ^(NSArray *selectFiles) {
-            [ws.delegate didSelectFiles:selectFiles];
-        };
-        [[self.delegate requireNavi] presentViewController:navi animated:YES completion:nil];
+        NSArray*documentTypes =@[
+                @"public.content",
+                @"public.data",
+                @"com.microsoft.powerpoint.ppt",
+                @"com.microsoft.word.doc",
+                @"com.microsoft.excel.xls",
+                @"com.microsoft.powerpoint.pptx",
+                @"com.microsoft.word.docx",
+                @"com.microsoft.excel.xlsx",
+                @"public.avi",
+                @"public.3gpp",
+                @"public.mpeg-4",
+                @"com.compuserve.gif",
+                @"public.jpeg",
+                @"public.png",
+                @"public.plain-text",
+                @"com.adobe.pdf"
+                ];
+
+        UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc] initWithDocumentTypes:documentTypes inMode:UIDocumentPickerModeOpen];
+        picker.delegate = self;
+        
+        if (@available(iOS 11.0, *)) {
+            picker.allowsMultipleSelection = YES;
+        }
+        
+        picker.modalPresentationStyle = UIModalPresentationFullScreen;
+        [navi presentViewController:picker animated:YES completion:nil];
+        
         [self notifyTyping:4];
+        
+    } else if(itemTag == 6) {
+        WFCUContactListViewController *pvc = [[WFCUContactListViewController alloc] init];
+        pvc.selectContact = YES;
+        pvc.multiSelect = NO;
+        
+        pvc.withoutCheckBox = YES;
+        
+        __weak typeof(self)ws = self;
+        
+        pvc.selectResult = ^(NSArray<NSString *> *contacts) {
+            if (contacts.count == 1) {
+                WFCCCardMessageContent *card = [WFCCCardMessageContent cardWithTarget:contacts[0] type:CardType_User];
+                WFCCMessage *message = [[WFCCMessage alloc] init];
+                message.content = card;
+                
+                
+                WFCUShareMessageView *shareView = [WFCUShareMessageView createViewFromNib];
+                    
+                shareView.conversation = ws.conversation;
+                shareView.message = message;
+                shareView.forwardDone = ^(BOOL success) {
+                    if (success) {
+                        [[ws.delegate requireNavi] dismissViewControllerAnimated:YES completion:nil];
+                    } else {
+                        [ws makeToast:WFCString(@"SendFailure") duration:1 position:CSToastPositionCenter];
+                    }
+                };
+            
+                TYAlertController *alertController = [TYAlertController alertControllerWithAlertView:shareView preferredStyle:TYAlertControllerStyleAlert];
+
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [[ws.delegate requireNavi] presentViewController:alertController animated:YES completion:nil];
+                });
+            }
+        };
+        
+        pvc.cancelSelect = ^(void) {
+            NSLog(@"canceled");
+        };
+        
+        
+        UINavigationController *navi = [[UINavigationController alloc] initWithRootViewController:pvc];
+        [[self.delegate requireNavi] presentViewController:navi animated:YES completion:nil];
     }
 }
+
 - (void)checkAndAlertCameraAccessRight {
     AVAuthorizationStatus authStatus =
     [AVCaptureDevice authorizationStatusForMediaType:AVMediaTypeVideo];
@@ -1026,6 +1095,61 @@
                                   otherButtonTitles:nil, nil];
         [alertView show];
     }
+}
+
+#pragma mark  UIDocumentDelegate 文件选择回调
+- (void)documentPicker:(UIDocumentPickerViewController *)controller didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls {
+
+    __block NSMutableArray *arr = [NSMutableArray array];
+
+    for (NSURL *url in urls) {
+       //获取授权
+       BOOL fileUrlAuthozied = [url startAccessingSecurityScopedResource];
+       if(fileUrlAuthozied){
+           //通过文件协调工具来得到新的文件地址，以此得到文件保护功能
+           NSFileCoordinator *fileCoordinator = [[NSFileCoordinator alloc] init];
+           NSError *error;
+           
+           [fileCoordinator coordinateReadingItemAtURL:url options:0 error:&error byAccessor:^(NSURL *newURL) {
+               if (!error) {
+                   NSData *fileData = [NSData dataWithContentsOfURL:newURL];
+                   NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+                   NSString *documentPath = [paths lastObject];
+                   NSString *tempDir = [documentPath stringByAppendingPathComponent:@"wf_send_files"];
+                   NSFileManager *fileManager = [NSFileManager defaultManager];
+                   
+                   bool isDir = NO;
+                   if (![fileManager fileExistsAtPath:tempDir isDirectory:&isDir]) {
+                       isDir = YES;
+                       NSError *err;
+                       if(![fileManager createDirectoryAtPath:tempDir withIntermediateDirectories:YES attributes:nil error:&err]) {
+                           NSLog(@"Error, create temp folder error");
+                           return;
+                       }
+                       if (err) {
+                           NSLog(@"Error, create temp folder error:%@", err);
+                           return;
+                       }
+                   }
+                   if (!isDir) {
+                       NSLog(@"Error, create temp folder error");
+                       return;
+                   }
+
+                   NSString *desFileName = [tempDir stringByAppendingPathComponent:[newURL lastPathComponent]];
+                   [fileData writeToFile:desFileName atomically:YES];
+                   [arr addObject:desFileName];
+               }
+           }];
+           
+           [url stopAccessingSecurityScopedResource];
+
+       }else{
+           NSLog(@"授权失败");
+       }
+    }
+
+    [self.delegate didSelectFiles:arr];
 }
 
 #pragma mark - UIImagePickerControllerDelegate<NSObject>
@@ -1059,7 +1183,7 @@
         
         NSDateFormatter *formater = [[NSDateFormatter alloc] init];// 用时间, 给文件重新命名, 防止视频存储覆盖,
         
-        [formater setDateFormat:@"yyyy-MM-dd-HH:mm:ss"];
+        [formater setDateFormat:@"yyyy-MM-dd_HH-mm-ss"];
         
         NSFileManager *manager = [NSFileManager defaultManager];
         
@@ -1259,7 +1383,7 @@
 
     NSDateFormatter *formater = [[NSDateFormatter alloc] init];// 用时间, 给文件重新命名, 防止视频存储覆盖,
 
-    [formater setDateFormat:@"yyyy-MM-dd-HH:mm:ss"];
+    [formater setDateFormat:@"yyyy-MM-dd_HH-mm-ss"];
 
     NSFileManager *manager = [NSFileManager defaultManager];
 
@@ -1341,7 +1465,9 @@
                                                                    UIImageOrientation orientation, NSDictionary *_Nullable info) {
                    BOOL downloadFinined = (![[info objectForKey:PHImageCancelledKey] boolValue] && ![info objectForKey:PHImageErrorKey] && ![[info objectForKey:PHImageResultIsDegradedKey] boolValue]);
                    if (downloadFinined) {
-                       if ([weakself.delegate respondsToSelector:@selector(imageDidCapture:)]) {
+                       if ([weakself isGifWithImageData:imageData] && [weakself.delegate respondsToSelector:@selector(gifDidCapture:)]) {
+                           [weakself.delegate gifDidCapture:imageData];
+                       } else if ([weakself.delegate respondsToSelector:@selector(imageDidCapture:)]) {
                            [weakself.delegate imageDidCapture:[UIImage imageWithData:imageData]];
                        }
                        
@@ -1358,6 +1484,40 @@
         
     }
         
+}
+
+- (BOOL)isGifWithImageData: (NSData *)data {
+    if ([[self contentTypeWithImageData:data] isEqualToString:@"gif"]) {
+        return YES;
+    }
+    return NO;
+}
+
+- (NSString *)contentTypeWithImageData: (NSData *)data {
+    uint8_t c;
+    [data getBytes:&c length:1];
+    switch (c) {
+        case 0xFF:
+            return @"jpeg";
+        case 0x89:
+            return @"png";
+        case 0x47:
+            return @"gif";
+        case 0x49:
+        case 0x4D:
+            return @"tiff";
+        case 0x52:
+            if ([data length] < 12) {
+                return nil;
+            }
+            
+            NSString *testString = [[NSString alloc] initWithData:[data subdataWithRange:NSMakeRange(0, 12)] encoding:NSASCIIStringEncoding];
+            if ([testString hasPrefix:@"RIFF"] && [testString hasSuffix:@"WEBP"]) {
+                return @"webp";
+            }
+            return nil;
+    }
+    return nil;
 }
 
 - (void)dealloc {
