@@ -24,6 +24,7 @@
 #import "KxMenu.h"
 #import "UIImage+ERCategory.h"
 #import "MBProgressHUD.h"
+#import "WFCUPinyinUtility.h"
 
 #import "WFCUContactTableViewCell.h"
 #import "QrCodeHelper.h"
@@ -51,6 +52,7 @@
 @property (nonatomic, assign) BOOL firstAppear;
 
 @property (nonatomic, strong) UIView *pcSessionView;
+@property (nonatomic, strong) UILabel *pcSessionLabel;
 @end
 
 @implementation WFCUConversationTableViewController
@@ -91,7 +93,6 @@
     }
     self.definesPresentationContext = YES;
     
-    [self updatePcSession];
     self.view.backgroundColor = [WFCUConfigManager globalManager].backgroudColor;
 }
 
@@ -310,12 +311,18 @@
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(onChannelInfoUpdated:) name:kChannelInfoUpdated object:nil];
     
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(onSendingMessageStatusUpdated:) name:kSendingMessageStatusUpdated object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(onMessageUpdated:) name:kMessageUpdated object:nil];
     
     self.firstAppear = YES;
 }
 
 - (void)updateConnectionStatus:(ConnectionStatus)status {
+    [self updateTitle];
+}
+
+- (void)updateTitle {
     UIView *title;
+    ConnectionStatus status = [WFCCNetworkService sharedInstance].currentConnectionStatus;
     if (status != kConnectionStatusConnecting && status != kConnectionStatusReceiving) {
         UILabel *navLabel = [[UILabel alloc] initWithFrame:CGRectMake([UIScreen mainScreen].bounds.size.width/2 - 40, 0, 80, 44)];
         
@@ -326,8 +333,19 @@
             case kConnectionStatusUnconnected:
                 navLabel.text = WFCString(@"NotConnect");
                 break;
-            case kConnectionStatusConnected:
-                navLabel.text = WFCString(@"Message");
+            case kConnectionStatusConnected: {
+                int count = 0;
+                for (WFCCConversationInfo *info in self.conversations) {
+                    if (!info.isSilent) {
+                        count += info.unreadCount.unread;
+                    }
+                }
+                if (count) {
+                    navLabel.text = [NSString stringWithFormat:WFCString(@"NumberOfMessage"), count];
+                } else {
+                    navLabel.text = WFCString(@"Message");
+                }
+            }
                 break;
                 
             default:
@@ -335,7 +353,7 @@
         }
         
         navLabel.textColor = [WFCUConfigManager globalManager].naviTextColor;
-        navLabel.font = [UIFont fontWithName:@"Arial-BoldMT" size:18];
+        navLabel.font = [UIFont fontWithName:@"Helvetica-Bold" size:18];
         
         navLabel.textAlignment = NSTextAlignmentCenter;
         title = navLabel;
@@ -361,7 +379,6 @@
     }
     self.navigationItem.titleView = title;
 }
-
 - (void)onConnectionStatusChanged:(NSNotification *)notification {
     ConnectionStatus status = [notification.object intValue];
     [self updateConnectionStatus:status];
@@ -373,6 +390,11 @@
         [self refreshList];
         [self refreshLeftButton];
     }
+}
+
+- (void)onMessageUpdated:(NSNotification *)notification {
+    [self refreshList];
+    [self refreshLeftButton];
 }
 
 - (void)onSettingUpdated:(NSNotification *)notification {
@@ -416,6 +438,7 @@
         }
     }
     [self.tabBarController.tabBar showBadgeOnItemIndex:0 badgeValue:count];
+    [self updateTitle];
 }
 
 - (void)updatePcSession {
@@ -424,6 +447,10 @@
     if (@available(iOS 11.0, *)) {
         if (onlines.count) {
             self.tableView.tableHeaderView = self.pcSessionView;
+            if (![[NSUserDefaults standardUserDefaults] boolForKey:@"wfc_uikit_had_pc_session"]) {
+                [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"wfc_uikit_had_pc_session"];
+                [[NSUserDefaults standardUserDefaults] synchronize];
+            }
         } else {
             self.tableView.tableHeaderView = nil;
         }
@@ -463,6 +490,7 @@
     [self updateConnectionStatus:[WFCCNetworkService sharedInstance].currentConnectionStatus];
     [self refreshList];
     [self refreshLeftButton];
+    [self updatePcSession];
 }
 
 - (void)traitCollectionDidChange:(UITraitCollection *)previousTraitCollection {
@@ -521,13 +549,32 @@
         UIImageView *iv = [[UIImageView alloc] initWithFrame:CGRectMake(20, 4, 32, 32)];
         iv.image = [UIImage imageNamed:@"pc_session"];
         [_pcSessionView addSubview:iv];
-        UILabel *label = [[UILabel alloc] initWithFrame:CGRectMake(68, 10, 100, 20)];
-        label.text = WFCString(@"PCLogined");
-        [_pcSessionView addSubview:label];
+        self.pcSessionLabel = [[UILabel alloc] initWithFrame:CGRectMake(68, 10, self.view.bounds.size.width - 68 - 16, 20)];
+        self.pcSessionLabel.font = [UIFont systemFontOfSize:16];
+        [_pcSessionView addSubview:self.pcSessionLabel];
         _pcSessionView.userInteractionEnabled = YES;
         UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(onTapPCBar:)];
         [_pcSessionView addGestureRecognizer:tap];
     }
+    NSArray<WFCCPCOnlineInfo *> *infos = [[WFCCIMService sharedWFCIMService] getPCOnlineInfos];
+    self.pcSessionLabel.text = nil;
+    if (infos.count) {
+        if (infos[0].platform == PlatformType_Windows) {
+            self.pcSessionLabel.text = @"Windows 已登录";
+        } else if(infos[0].platform == PlatformType_OSX) {
+            self.pcSessionLabel.text = @"Mac 已登录";
+        } else if(infos[0].platform == PlatformType_Linux) {
+            self.pcSessionLabel.text = @"Linux 已登录";
+        } else if(infos[0].platform == PlatformType_WEB) {
+            self.pcSessionLabel.text = @"Web 已登录";
+        } else if(infos[0].platform == PlatformType_WX) {
+            self.pcSessionLabel.text = @"小程序已登录";
+        }
+        if(self.pcSessionLabel.text.length && [[WFCCIMService sharedWFCIMService] isMuteNotificationWhenPcOnline]) {
+            self.pcSessionLabel.text = [self.pcSessionLabel.text stringByAppendingString:@"，手机通知已关闭"];
+        }
+    }
+    
     return _pcSessionView;
 }
 
@@ -1029,11 +1076,30 @@
     self.extendedLayoutIncludesOpaqueBars = NO;
 }
 
+- (NSArray<WFCCUserInfo *> *)searchFriends:(NSString *)searchString {
+    NSMutableArray<WFCCUserInfo *> *result = [[NSMutableArray alloc] init];
+    if(searchString.length) {
+        WFCUPinyinUtility *pu = [[WFCUPinyinUtility alloc] init];
+        NSArray<WFCCUserInfo *> *dataArray = [[WFCCIMService sharedWFCIMService] getUserInfos:[[WFCCIMService sharedWFCIMService] getMyFriendList:NO] inGroup:nil];
+        BOOL isChinese = [pu isChinese:searchString];
+        for (WFCCUserInfo *friend in dataArray) {
+            if ([friend.displayName.lowercaseString containsString:searchString.lowercaseString] || [friend.friendAlias.lowercaseString containsString:searchString.lowercaseString]) {
+                [result addObject:friend];
+            } else if(!isChinese) {
+                if([pu isMatch:friend.displayName ofPinYin:searchString] || [pu isMatch:friend.friendAlias ofPinYin:searchString]) {
+                    [result addObject:friend];
+                }
+            }
+        }
+    }
+    return result;
+}
+
 -(void)updateSearchResultsForSearchController:(UISearchController *)searchController {
     NSString *searchString = [self.searchController.searchBar text];
     if (searchString.length) {
         self.searchConversationList = [[WFCCIMService sharedWFCIMService] searchConversation:searchString inConversation:@[@(Single_Type), @(Group_Type), @(Channel_Type)] lines:@[@(0)]];
-        self.searchFriendList = [[WFCCIMService sharedWFCIMService] searchFriends:searchString];
+        self.searchFriendList = [self searchFriends:searchString];
         self.searchGroupList = [[WFCCIMService sharedWFCIMService] searchGroups:searchString];
     } else {
         self.searchConversationList = nil;

@@ -127,6 +127,10 @@ typedef NS_ENUM(NSInteger, WFAVVideoProfile) {
  - kWFAVCallEndReasonOpenCameraFailure: 摄像头错误
  - kWFAVCallEndReasonTimeout: 未接听
  - kWFAVCallEndReasonAcceptByOtherClient: 被其它端接听
+ - kWFAVCallEndReasonRemoteBusy: 对方忙线中
+ - kWFAVCallEndReasonRemoteTimeout：对方未接听
+ - kWFAVCallEndReasonRemoteNetworkError：对方网络错误
+ - kWFAVCallEndReasonRoomDestroyed：会议室被销毁
  */
 typedef NS_ENUM(NSInteger, WFAVCallEndReason) {
   kWFAVCallEndReasonUnknown = 0,
@@ -141,7 +145,10 @@ typedef NS_ENUM(NSInteger, WFAVCallEndReason) {
   kWFAVCallEndReasonAllLeft,
   kWFAVCallEndReasonRemoteBusy,
   kWFAVCallEndReasonRemoteTimeout,
-  kWFAVCallEndReasonRemoteNetworkError
+  kWFAVCallEndReasonRemoteNetworkError,
+  kWFAVCallEndReasonRoomDestroyed,
+  kWFAVCallEndReasonRoomNotExist,
+  kWFAVCallEndReasonRoomParticipantsFull
 };
 
 #pragma mark - 通话监听
@@ -169,6 +176,10 @@ typedef NS_ENUM(NSInteger, WFAVCallEndReason) {
  */
 - (void)shouldStopRing;
 
+/**
+ 电话终止，一般用于未接听或者挂掉时的通知使用，UI界面需要根据CallSession的回调判断电话终止。
+ */
+- (void)didCallEnded:(WFAVCallEndReason) reason duration:(int)callDuration;
 @end
 
 /**
@@ -252,6 +263,11 @@ typedef NS_ENUM(NSInteger, WFAVCallEndReason) {
 @param userId 用户Id
 */
 - (void)didChangeType:(BOOL)audience ofUser:(NSString *_Nonnull)userId;
+
+/**
+音频播放port发送改变，当蓝牙设备/耳机 连接/断开连接时回调
+*/
+- (void)didChangeAudioRoute;
 @end
 
 #pragma mark - 通话引擎
@@ -282,6 +298,12 @@ typedef NS_ENUM(NSInteger, WFAVCallEndReason) {
 最大视频通话路数，单人音视频默认为2，无法修改。
 */
 @property(nonatomic, assign)int maxVideoCallCount;
+
+/*
+是否更新邀请消息的时间。当为YES时，StartCall消息会被更新为结束时间。
+*/
+@property(nonatomic, assign)BOOL updateCallStartMessageTimestamp;
+
 /**
  添加ICE服务地址和鉴权
 
@@ -397,6 +419,12 @@ typedef NS_ENUM(NSInteger, WFAVCallEndReason) {
  对方的用户ID
  */
 @property(nonatomic, strong, readonly) NSString *clientId;
+
+/**
+邀请者用户ID，与initiator的区别是：initiator是当前通话的管理者，全局只有同一个用户，如果initiator退出，会选举出新的initiator；
+ inviter为邀请当前用户的邀请者，一直保持不变。
+*/
+@property(nonatomic, strong, readonly) NSString * _Nullable inviter;
 
 /**
  通话Session的事件监听
@@ -544,6 +572,20 @@ typedef NS_ENUM(NSInteger, WFAVCallEndReason) {
 - (void)switchCamera;
 
 /**
+ 是否是蓝牙设备连接
+
+ @return 是否是蓝牙设备连接
+ */
+- (BOOL)isBluetoothSpeaker;
+
+/**
+ 是否是耳机连接
+
+ @return 是否是耳机连接
+ */
+- (BOOL)isHeadsetPluggedIn;
+
+/**
  设置本地视频视图Container
  
  @param videoContainerView 本地视频视图Container
@@ -558,5 +600,12 @@ typedef NS_ENUM(NSInteger, WFAVCallEndReason) {
  @param scalingType 缩放模式
  */
 - (void)setupRemoteVideoView:(UIView *)videoContainerView scalingType:(WFAVVideoScalingType)scalingType forUser:(NSString *)targetId;
+
+
+/* 此函数没有意义，仅为了兼容UI代码 */
+- (void)leaveConference:(BOOL)destroy;
+
+/* 此函数没有意义，仅为了兼容UI代码 */
+- (void)switchAudience:(BOOL)audience;
 @end
 

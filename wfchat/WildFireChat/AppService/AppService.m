@@ -11,9 +11,11 @@
 #import "AFNetworking.h"
 #import "WFCConfig.h"
 #import "PCSessionViewController.h"
+#import <WFChatUIKit/WFChatUIKit.h>
 
 static AppService *sharedSingleton = nil;
 
+#define WFC_APPSERVER_COOKIES @"WFC_APPSERVER_COOKIES"
 @implementation AppService 
 + (AppService *)sharedAppService {
     if (sharedSingleton == nil) {
@@ -169,7 +171,7 @@ static AppService *sharedSingleton = nil;
     manager.responseSerializer.acceptableContentTypes = [NSSet setWithObject:@"application/json"];
     
     //在调用其他接口时需要把cookie传给后台，也就是设置cookie的过程
-    NSData *cookiesdata = [[NSUserDefaults standardUserDefaults] objectForKey:@"WFC_APPSERVER_COOKIES"];//url和登陆时传的url 是同一个
+    NSData *cookiesdata = [self getAppServiceCookies];//url和登陆时传的url 是同一个
     if([cookiesdata length]) {
         NSArray *cookies = [NSKeyedUnarchiver unarchiveObjectWithData:cookiesdata];
         NSHTTPCookie *cookie;
@@ -186,7 +188,7 @@ static AppService *sharedSingleton = nil;
             //Save cookies
             NSArray *cookies = [[NSHTTPCookieStorage sharedHTTPCookieStorage] cookiesForURL: [NSURL URLWithString:APP_SERVER_ADDRESS]];
             NSData *data = [NSKeyedArchiver archivedDataWithRootObject:cookies];
-            [[NSUserDefaults standardUserDefaults] setObject:data forKey:@"WFC_APPSERVER_COOKIES"];
+            [[NSUserDefaults standardUserDefaults] setObject:data forKey:WFC_APPSERVER_COOKIES];
         
               NSDictionary *dict = responseObject;
               dispatch_async(dispatch_get_main_queue(), ^{
@@ -212,6 +214,8 @@ static AppService *sharedSingleton = nil;
         //但需要上传最后一条已经上传日志，因为那个日志文件可能在上传之后继续写入了，所以需要继续上传
         if (uploadedFiles.count) {
             [uploadedFiles removeLastObject];
+        } else {
+            uploadedFiles = [[NSMutableArray alloc] init];
         }
         for (NSString *file in [logFiles copy]) {
             NSString *name = [file componentsSeparatedByString:@"/"].lastObject;
@@ -385,4 +389,92 @@ static AppService *sharedSingleton = nil;
         if(errorBlock) errorBlock(-1);
     }];
 }
+
+- (void)getFavoriteItems:(int )startId
+                   count:(int)count
+                 success:(void(^)(NSArray<WFCUFavoriteItem *> *items, BOOL hasMore))successBlock
+                   error:(void(^)(int error_code))errorBlock {
+    NSString *path = @"/fav/list";
+    NSDictionary *param = @{@"id":@(startId), @"count":@(count)};
+    [self post:path data:param success:^(NSDictionary *dict) {
+        if([dict[@"code"] intValue] == 0) {
+            NSDictionary *result = dict[@"result"];
+            BOOL hasMore = [result[@"hasMore"] boolValue];
+            NSArray<NSDictionary *> *arrs = (NSArray *)result[@"items"];
+            NSMutableArray<WFCUFavoriteItem *> *output = [[NSMutableArray alloc] init];
+            for (NSDictionary *d in arrs) {
+                WFCUFavoriteItem *item = [[WFCUFavoriteItem alloc] init];
+                item.conversation = [WFCCConversation conversationWithType:[d[@"convType"] intValue] target:d[@"convTarget"] line:[d[@"convLine"] intValue]];
+                item.favId = [d[@"id"] intValue];
+                item.timestamp = [d[@"timestamp"] longLongValue];
+                item.url = d[@"url"];
+                item.favType = [d[@"type"] intValue];
+                item.title = d[@"title"];
+                item.data = d[@"data"];
+                item.origin = d[@"origin"];
+                item.thumbUrl = d[@"thumbUrl"];
+                item.sender = d[@"sender"];
+                
+                [output addObject:item];
+            }
+            if(successBlock) successBlock(output, hasMore);
+        } else {
+            errorBlock([dict[@"code"] intValue]);
+        }
+    } error:^(NSError * _Nonnull error) {
+        if(errorBlock) errorBlock(-1);
+    }];
+}
+
+- (void)addFavoriteItem:(WFCUFavoriteItem *)item
+                success:(void(^)(void))successBlock
+                  error:(void(^)(int error_code))errorBlock {
+    NSString *path = @"/fav/add";
+    NSDictionary *param = @{@"type":@(item.favType),
+                            @"convType":@(item.conversation.type),
+                            @"convLine":@(item.conversation.line),
+                            @"convTarget":item.conversation.target?item.conversation.target:@"",
+                            @"origin":item.origin?item.origin:@"",
+                            @"sender":item.sender?item.sender:@"",
+                            @"title":item.title?item.title:@"",
+                            @"url":item.url?item.url:@"",
+                            @"thumbUrl":item.thumbUrl?item.thumbUrl:@"",
+                            @"data":item.data?item.data:@""
+    };
+    
+    [self post:path data:param success:^(NSDictionary *dict) {
+        if([dict[@"code"] intValue] == 0) {
+            if(successBlock) successBlock();
+        } else {
+            if(errorBlock) errorBlock([dict[@"code"] intValue]);
+        }
+    } error:^(NSError * _Nonnull error) {
+        if(errorBlock) errorBlock(-1);
+    }];
+}
+
+- (void)removeFavoriteItem:(int)favId
+                   success:(void(^)(void))successBlock
+                     error:(void(^)(int error_code))errorBlock {
+    NSString *path = [NSString stringWithFormat:@"/fav/del/%d", favId];
+    
+    [self post:path data:nil success:^(NSDictionary *dict) {
+        if([dict[@"code"] intValue] == 0) {
+            if(successBlock) successBlock();
+        } else {
+            if(errorBlock) errorBlock([dict[@"code"] intValue]);
+        }
+    } error:^(NSError * _Nonnull error) {
+        if(errorBlock) errorBlock(-1);
+    }];
+}
+
+- (NSData *)getAppServiceCookies {
+    return [[NSUserDefaults standardUserDefaults] objectForKey:WFC_APPSERVER_COOKIES];
+}
+
+- (void)clearAppServiceCookies {
+    [[NSUserDefaults standardUserDefaults] removeObjectForKey:WFC_APPSERVER_COOKIES];
+}
+
 @end

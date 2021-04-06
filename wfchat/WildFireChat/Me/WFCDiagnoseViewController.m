@@ -24,7 +24,7 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     
-    self.title = LocalizedString(@"Diagnose");
+    self.title = WFCString(@"Diagnose");
     
     if (@available(iOS 13.0, *)) {
         self.indicatorView = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
@@ -33,6 +33,7 @@
         self.indicatorView = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleWhiteLarge];
         
     }
+    self.indicatorView.color = [UIColor grayColor];
     
     self.view.backgroundColor = [WFCUConfigManager globalManager].backgroudColor;
     self.indicatorView.center = CGPointMake(self.view.bounds.size.width/2, self.view.bounds.size.height/4 - 10);

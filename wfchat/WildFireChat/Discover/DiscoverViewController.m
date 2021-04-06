@@ -30,13 +30,13 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.dataSource = [NSMutableArray arrayWithArray:@[@{@"title":LocalizedString(@"Chatroom"),@"image":@"discover_chatroom",@"des":@"chatroom"},
-        @{@"title":LocalizedString(@"Rebot"),@"image":@"rebot",@"des":@"rebot"},
-        @{@"title":LocalizedString(@"Channel"),
-          @"image":@"chat_channel",@"des":@"channel"},
-        @{@"title":LocalizedString(@"DevDocs"),
-          @"image":@"dev_docs",@"des":@"Dev"},@{@"title":@"Things",
-          @"image":@"discover_things",@"des":@"Things"}]];
+    self.dataSource = [NSMutableArray arrayWithArray:@[
+                       @{@"title":LocalizedString(@"Chatroom"),@"image":@"discover_chatroom",@"des":@"chatroom"},
+                       @{@"title":LocalizedString(@"Robot"),@"image":@"robot",@"des":@"robot"},
+                       @{@"title":LocalizedString(@"Channel"), @"image":@"chat_channel",@"des":@"channel"},
+                       @{@"title":LocalizedString(@"DevDocs"), @"image":@"dev_docs",@"des":@"Dev"}
+//                     @{@"title":@"Things", @"image":@"discover_things",@"des":@"Things"}
+    ]];
     
     if(NSClassFromString(@"SDTimeLineTableViewController")) {
         [self.dataSource insertObject:@{@"title":LocalizedString(@"Moments"),@"image":@"AlbumReflashIcon",@"des":@"moment"} atIndex:0];
@@ -46,7 +46,8 @@
     }
     
     if ([WFAVEngineKit sharedEngineKit].supportConference) {
-        [self.dataSource addObject:@{@"title":@"Conference",@"image":@"discover_conference",@"des":@"Conference"}];
+        [self.dataSource addObject:@{@"title":LocalizedString(@"Conference"),@"image":@"discover_conference",@"des":@"Conference"}];
+        [self.dataSource addObject:@{@"title":@"对讲机",@"image":@"discover_intercom",@"des":@"Push to Talk"}];
     }
     
     self.tableView = [[UITableView alloc] initWithFrame:CGRectMake(0, 0, self.view.frame.size.width, self.view.frame.size.height) style:UITableViewStylePlain];
@@ -57,7 +58,7 @@
     [self.tableView reloadData];
     self.tableView.backgroundColor = [WFCUConfigManager globalManager].backgroudColor;
     [self.view addSubview:self.tableView];
-    
+    self.view.backgroundColor = [WFCUConfigManager globalManager].backgroudColor;
 #ifdef WFC_MOMENTS
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(onReceiveComments:) name:kReceiveComments object:nil];
 #endif
@@ -120,7 +121,7 @@
         [self.navigationController pushViewController:channelVC animated:YES];
     }
     
-    if ([des isEqualToString:@"rebot"]) {
+    if ([des isEqualToString:@"robot"]) {
             WFCUMessageListViewController *mvc = [[WFCUMessageListViewController alloc] init];
             mvc.conversation = [[WFCCConversation alloc] init];
             mvc.conversation.type = Single_Type;
@@ -139,19 +140,24 @@
         vc.url = @"http://docs.wildfirechat.cn";
         [self.navigationController pushViewController:vc animated:YES];
     }
-    
-    if ([des isEqualToString:@"Things"]) {
-        DeviceTableViewController *vc = [[DeviceTableViewController alloc] init];
-        vc.hidesBottomBarWhenPushed = YES;
-        [self.navigationController pushViewController:vc animated:YES];
-    }
+//
+//    if ([des isEqualToString:@"Things"]) {
+//        DeviceTableViewController *vc = [[DeviceTableViewController alloc] init];
+//        vc.hidesBottomBarWhenPushed = YES;
+//        [self.navigationController pushViewController:vc animated:YES];
+//    }
     
     if ([des isEqualToString:@"Conference"]) {
         WFCUCreateConferenceViewController *vc = [[WFCUCreateConferenceViewController alloc] init];
         vc.hidesBottomBarWhenPushed = YES;
         [self.navigationController pushViewController:vc animated:YES];
     }
-
+    
+    if ([des isEqualToString:@"Push to Talk"]) {
+        WFCUPushToTalkCreateViewController *vc = [[WFCUPushToTalkCreateViewController alloc] init];
+        vc.hidesBottomBarWhenPushed = YES;
+        [self.navigationController pushViewController:vc animated:YES];
+    }
 }
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {

@@ -82,5 +82,19 @@
 使用手机号码及验证码登陆，
 > 在没有短信供应商时，可以使用[superCode](https://github.com/wildfirechat/app_server#短信资源)进行测试验证。
 
+### 集成
+在集成到其他应用中时，如果使用了UIKit库，需要在应用的```Info.plist```文件中添加属性```CFBundleAllowMixedLocalizations```值为true。
+
+### 第三方动态库
+1. [SDWebImage](https://github.com/SDWebImage/SDWebImage)
+2. [ZLPhotoBrowser](https://github.com/longitachi/ZLPhotoBrowser)
+> UI层使用了它们的动态库，如果需要源码可以去对应地址下载，可以自己编译替换第三方动态库。
+
 ### 鸣谢
 本工程使用了[mars](https://github.com/tencent/mars)及其它大量优秀的开源项目，对他们的贡献表示感谢。本工程使用的Icon全部来源于[icons8](https://icons8.com)，对他们表示感谢。Gif动态图来源于网络，对网友的制作表示感谢。如果有什么地方侵犯了您的权益，请联系我们删除🙏🙏🙏
+
+
+### License
+1. Under the Creative Commons Attribution-NoDerivs 3.0 Unported license. See the [LICENSE](https://github.com/wildfirechat/ios-chat/blob/master/LICENSE) file for details.
+2. Under the 996ICU License. See the [LICENSE](https://github.com/996icu/996.ICU/blob/master/LICENSE) file for details.
+

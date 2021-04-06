@@ -17,11 +17,8 @@
 @end
 
 @implementation WFCCImageMessageContent
-+ (instancetype)contentFrom:(UIImage *)image {
++ (instancetype)contentFrom:(UIImage *)image cachePath:(NSString *)path {
     WFCCImageMessageContent *content = [[WFCCImageMessageContent alloc] init];
-    UInt64 recordTime = [[NSDate date] timeIntervalSince1970]*1000;
-    
-    NSString *path = [[WFCCUtilities getDocumentPathWithComponent:@"/IMG"] stringByAppendingPathComponent:[NSString stringWithFormat:@"img%lld.jpg", recordTime]];
     
     image = [WFCCUtilities generateThumbnail:image withWidth:1024 withHeight:1024];
     NSData *imgData = UIImageJPEGRepresentation(image, 0.85);
@@ -99,7 +96,7 @@
 }
 
 - (UIImage *)thumbnail {
-    if (!_thumbnail && self.localPath.length) {
+    if (!_thumbnail && self.localPath.length && [[NSFileManager defaultManager] isExecutableFileAtPath:self.localPath]) {
         UIImage *image = [UIImage imageWithContentsOfFile:self.localPath];
         _thumbnail = [WFCCUtilities generateThumbnail:image withWidth:120 withHeight:120];
     }

@@ -15,8 +15,6 @@
 #import "WFCUUtilities.h"
 #import "WFCULocationViewController.h"
 #import "WFCULocationPoint.h"
-#import "WFCUSelectFileViewController.h"
-#import "KZVideoViewController.h"
 #import "UIView+Toast.h"
 #import <WFChatClient/WFCChatClient.h>
 #import "WFCUContactListViewController.h"
@@ -25,15 +23,18 @@
 #if WFCU_SUPPORT_VOIP
 #import <WFAVEngineKit/WFAVEngineKit.h>
 #endif
-#import "DNImagePickerController.h"
-#import "DNAsset.h"
 #import <Photos/Photos.h>
 #import "WFCUShareMessageView.h"
 #import "TYAlertController.h"
 #import "UIView+TYAlertView.h"
+#import <ZLPhotoBrowser/ZLPhotoBrowser-Swift.h>
+#import "WFCUConfigManager.h"
+
 
 #define CHAT_INPUT_BAR_PADDING 8
 #define CHAT_INPUT_BAR_ICON_SIZE (CHAT_INPUT_BAR_HEIGHT - CHAT_INPUT_BAR_PADDING - CHAT_INPUT_BAR_PADDING)
+
+#define CHAT_INPUT_QUOTE_PADDING 5
 
 @implementation WFCUMetionInfo
 - (instancetype)initWithType:(int)type target:(NSString *)target range:(NSRange)range {
@@ -50,7 +51,7 @@
 //@implementation TextInfo
 //
 //@end
-@interface WFCUChatInputBar () <UITextViewDelegate, WFCUFaceBoardDelegate, UIImagePickerControllerDelegate, AVAudioRecorderDelegate, AVAudioPlayerDelegate, WFCUPluginBoardViewDelegate, UIImagePickerControllerDelegate, LocationViewControllerDelegate, UIActionSheetDelegate, KZVideoViewControllerDelegate, DNImagePickerControllerDelegate, UIDocumentPickerDelegate>
+@interface WFCUChatInputBar () <UITextViewDelegate, WFCUFaceBoardDelegate, UIImagePickerControllerDelegate, AVAudioRecorderDelegate, AVAudioPlayerDelegate, WFCUPluginBoardViewDelegate, UIImagePickerControllerDelegate, LocationViewControllerDelegate, UIActionSheetDelegate, UIDocumentPickerDelegate>
 
 @property (nonatomic, assign)BOOL textInput;
 @property (nonatomic, assign)BOOL voiceInput;
@@ -68,6 +69,10 @@
 
 @property (nonatomic, strong)UIView *emojInputView;
 @property (nonatomic, strong)UIView *pluginInputView;
+
+@property (nonatomic, strong)UIView *quoteContainerView;
+@property (nonatomic, strong)UILabel *quoteLabel;
+@property (nonatomic, strong)UIButton *quoteDeleteBtn;
 
 @property(nonatomic, weak)id<WFCUChatInputBarDelegate> delegate;
 
@@ -89,6 +94,8 @@
 @property (nonatomic, strong)UIColor *textInputViewTintColor;
 
 @property (nonatomic, assign)CGRect backupFrame;
+
+@property (nonatomic, strong)WFCCQuoteInfo *quoteInfo;
 @end
 
 @implementation WFCUChatInputBar
@@ -213,10 +220,12 @@
         return;
     }
     
-    //[self stopPlayer];
-    
+    __weak typeof(self)ws = self;
     [[AVAudioSession sharedInstance] requestRecordPermission:^(BOOL granted) {
         if (granted) {
+            if (!ws.recordView.superview) {
+                return;
+            }
             AVAudioSession *session = [AVAudioSession sharedInstance];
             [session setCategory:AVAudioSessionCategoryRecord error:nil];
             BOOL r = [session setActive:YES error:nil];
@@ -481,9 +490,20 @@
         if (self.textInputView.isFirstResponder) {
             [self.textInputView resignFirstResponder];
         }
+        
         [self.voiceSwitchBtn setImage:[UIImage imageNamed:@"chat_input_bar_keyboard"] forState:UIControlStateNormal];
+        CGFloat diff = 0;
+        if (self.textInputView.frame.size.height != CHAT_INPUT_BAR_ICON_SIZE) {
+            diff = self.textInputView.frame.size.height - CHAT_INPUT_BAR_ICON_SIZE;
+        }
+        if (self.quoteContainerView && !self.quoteContainerView.hidden) {
+            self.quoteContainerView.hidden = YES;
+            diff += self.quoteContainerView.frame.size.height + CHAT_INPUT_QUOTE_PADDING;
+        }
+        [self extendUp:-diff];
     } else {
         [self.textInputView setHidden:NO];
+        self.quoteContainerView.hidden = NO;
         [self.voiceInputBtn setHidden:YES];
         [self.voiceSwitchBtn setImage:[UIImage imageNamed:@"chat_input_bar_voice"] forState:UIControlStateNormal];
     }
@@ -493,6 +513,7 @@
     _emojInput = emojInput;
     if (emojInput) {
         [self.textInputView setHidden:NO];
+        self.quoteContainerView.hidden = NO;
         [self.voiceInputBtn setHidden:YES];
         self.textInputView.inputView = self.emojInputView;
         if (!self.textInputView.isFirstResponder) {
@@ -500,6 +521,9 @@
         }
         [self.textInputView reloadInputViews];
         [self.emojSwitchBtn setImage:[UIImage imageNamed:@"chat_input_bar_keyboard"] forState:UIControlStateNormal];
+        if (self.textInputView.frame.size.height+self.quoteContainerView.frame.size.height > self.frame.size.height) {
+            [self textView:self.textInputView shouldChangeTextInRange:NSMakeRange(self.textInputView.text.length, 0) replacementText:@""];
+        }
     } else {
         [self.emojSwitchBtn setImage:[UIImage imageNamed:@"chat_input_bar_emoj"] forState:UIControlStateNormal];
     }
@@ -509,12 +533,17 @@
     _pluginInput = pluginInput;
     if (pluginInput) {
         [self.textInputView setHidden:NO];
+        self.quoteContainerView.hidden = NO;
         [self.voiceInputBtn setHidden:YES];
         self.textInputView.inputView = self.pluginInputView;
         if (!self.textInputView.isFirstResponder) {
             [self.textInputView becomeFirstResponder];
         }
         [self.textInputView reloadInputViews];
+        self.quoteContainerView.hidden = NO;
+        if (self.textInputView.frame.size.height+self.quoteContainerView.frame.size.height > self.frame.size.height) {
+            [self textView:self.textInputView shouldChangeTextInRange:NSMakeRange(self.textInputView.text.length, 0) replacementText:@""];
+        }
     }
 }
 
@@ -522,6 +551,7 @@
     _textInput = textInput;
     if (textInput) {
         [self.textInputView setHidden:NO];
+        self.quoteContainerView.hidden = NO;
         [self.voiceInputBtn setHidden:YES];
         self.textInputView.inputView = nil;
         if (!self.textInputView.isFirstResponder && _inputBarStatus == ChatInputBarKeyboardStatus) {
@@ -529,6 +559,9 @@
         }
         if (_inputBarStatus == ChatInputBarKeyboardStatus) {
             [self.textInputView reloadInputViews];
+        }
+        if (self.textInputView.frame.size.height+self.quoteContainerView.frame.size.height > self.frame.size.height) {
+            [self textView:self.textInputView shouldChangeTextInRange:NSMakeRange(self.textInputView.text.length, 0) replacementText:@""];
         }
     }
     
@@ -549,13 +582,14 @@
                                                                options:kNilOptions
                                                                  error:&__error];
     
-    BOOL hasMentionInfo = NO;
-    NSString *text = nil;
+    BOOL textDraft = YES;
+    NSString *text = draft;
     NSMutableArray<WFCUMetionInfo *> *mentionInfos = [[NSMutableArray alloc] init];
+    WFCCQuoteInfo *quoteInfo = nil;
+    
     if (!__error) {
-        if (dictionary[@"text"] != nil && [dictionary[@"mentions"] isKindOfClass:[NSArray class]]) {
-            hasMentionInfo = YES;
-            text = dictionary[@"text"];
+        if ([dictionary[@"mentions"] isKindOfClass:[NSArray class]]) {
+            textDraft = NO;
             NSArray *mentions = dictionary[@"mentions"];
             [mentions enumerateObjectsUsingBlock:^(id  _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
                 NSDictionary *dic = (NSDictionary *)obj;
@@ -566,35 +600,53 @@
                 [mentionInfos addObject:mentionInfo];
             }];
         }
+        
+        if ([dictionary[@"quote"] isKindOfClass:[NSDictionary class]]) {
+            textDraft = NO;
+            quoteInfo = [[WFCCQuoteInfo alloc] init];
+            [quoteInfo decode:dictionary[@"quote"]];
+        }
+        
+        if (!textDraft) {
+            text = dictionary[@"text"];
+        }
     }
     
-    if (hasMentionInfo) {
-        draft = text;
-    }
     //防止弹出@选项
-    if ([draft isEqualToString:@"@"]) {
-        draft = @"@ ";
+    if ([text isEqualToString:@"@"]) {
+        text = @"@ ";
     }
     
-    [self textView:self.textInputView shouldChangeTextInRange:NSMakeRange(0, 0) replacementText:draft];
-    self.textInputView.text = draft;
     self.mentionInfos = mentionInfos;
+    if (quoteInfo) {
+        self.quoteInfo = quoteInfo;
+        [self updateQuoteView:NO showKeyboard:NO];
+    }
+    
+    [self textView:self.textInputView shouldChangeTextInRange:NSMakeRange(0, 0) replacementText:text];
+    self.textInputView.text = text;
 }
 
 - (NSString *)draft {
-    if (self.mentionInfos.count) {
+    if (self.mentionInfos.count || self.quoteInfo) {
         NSMutableDictionary *dataDict = [NSMutableDictionary dictionary];
         [dataDict setObject:self.textInputView.text forKey:@"text"];
-        NSMutableArray *mentions = [[NSMutableArray alloc] init];
-        [self.mentionInfos enumerateObjectsUsingBlock:^(WFCUMetionInfo * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
-            NSMutableDictionary *dic = [[NSMutableDictionary alloc] init];
-            [dic setObject:obj.target forKey:@"target"];
-            [dic setObject:@(obj.mentionType) forKey:@"type"];
-            [dic setObject:@(obj.range.location) forKey:@"loc"];
-            [dic setObject:@(obj.range.length) forKey:@"len"];
-            [mentions addObject:dic];
-        }];
-        [dataDict setObject:mentions forKey:@"mentions"];
+        if (self.mentionInfos.count) {
+            NSMutableArray *mentions = [[NSMutableArray alloc] init];
+            [self.mentionInfos enumerateObjectsUsingBlock:^(WFCUMetionInfo * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
+                NSMutableDictionary *dic = [[NSMutableDictionary alloc] init];
+                [dic setObject:obj.target forKey:@"target"];
+                [dic setObject:@(obj.mentionType) forKey:@"type"];
+                [dic setObject:@(obj.range.location) forKey:@"loc"];
+                [dic setObject:@(obj.range.length) forKey:@"len"];
+                [mentions addObject:dic];
+            }];
+            [dataDict setObject:mentions forKey:@"mentions"];
+        }
+        if (self.quoteInfo) {
+            NSDictionary *quoteDict = [self.quoteInfo encode];
+            [dataDict setObject:quoteDict forKey:@"quote"];
+        }
         
         NSData *data = [NSJSONSerialization dataWithJSONObject:dataDict
                                                                 options:kNilOptions
@@ -658,6 +710,10 @@
     [UIView animateWithDuration:duration animations:^{
         self.frame = frame;
     }];
+    
+    if(self.inputBarStatus == ChatInputBarKeyboardStatus || self.inputBarStatus == ChatInputBarPluginStatus || self.inputBarStatus == ChatInputBarEmojiStatus) {
+        _inputBarStatus = ChatInputBarDefaultStatus;
+    }
 }
 
 -(void)keyboardDidHide:(NSNotification *)notification{
@@ -686,6 +742,96 @@
     } else {
         return NO;
     }
+}
+- (void)clearQuoteInfo {
+    self.quoteInfo = nil;
+}
+- (void)onQuoteDelBtn:(id)sender {
+    if (self.quoteInfo.messageUid) {
+        [self clearQuoteInfo];
+        [self updateQuoteView:YES showKeyboard:YES];
+    }
+}
+
+- (void)updateQuoteView:(BOOL)updateFrame showKeyboard:(BOOL)showKeyboard {
+    if (self.inputBarStatus == ChatInputBarMuteStatus) {
+        return;
+    }
+    
+    if (showKeyboard && (self.inputBarStatus == ChatInputBarDefaultStatus || self.inputBarStatus == ChatInputBarRecordStatus)) {
+        self.inputBarStatus = ChatInputBarKeyboardStatus;
+    }
+    
+    if (self.quoteInfo.messageUid) {
+        NSString *textContent = [NSString stringWithFormat:@"%@:%@", self.quoteInfo.userDisplayName, self.quoteInfo.messageDigest];
+        
+        CGFloat deleteBtnWidth = 10;
+        CGRect textViewFrame = self.textInputView.frame;
+        CGSize size = [WFCUUtilities getTextDrawingSize:textContent font:[UIFont systemFontOfSize:12] constrainedSize:CGSizeMake(textViewFrame.size.width-CHAT_INPUT_QUOTE_PADDING-CHAT_INPUT_QUOTE_PADDING-deleteBtnWidth-CHAT_INPUT_QUOTE_PADDING, 30)];
+        size.height += 4;
+        
+        self.quoteLabel = [[UILabel alloc] initWithFrame:CGRectMake(CHAT_INPUT_QUOTE_PADDING, 0, textViewFrame.size.width-CHAT_INPUT_QUOTE_PADDING-CHAT_INPUT_QUOTE_PADDING-deleteBtnWidth, size.height)];
+        self.quoteLabel.font = [UIFont systemFontOfSize:12];
+        self.quoteLabel.textColor = [UIColor grayColor];
+        self.quoteLabel.text = textContent;
+        self.quoteLabel.numberOfLines = 0;
+        self.quoteDeleteBtn = [[UIButton alloc] initWithFrame:CGRectMake(textViewFrame.size.width-deleteBtnWidth-CHAT_INPUT_QUOTE_PADDING, (size.height-deleteBtnWidth)/2, deleteBtnWidth, deleteBtnWidth)];
+        [self.quoteDeleteBtn setTitle:@"x" forState:UIControlStateNormal];
+        [self.quoteDeleteBtn addTarget:self action:@selector(onQuoteDelBtn:) forControlEvents:UIControlEventTouchUpInside];
+        
+        self.quoteContainerView = [[UIView alloc] initWithFrame:CGRectMake(textViewFrame.origin.x, textViewFrame.origin.y+textViewFrame.size.height+CHAT_INPUT_QUOTE_PADDING, textViewFrame.size.width, size.height)];
+        self.quoteContainerView.backgroundColor = [UIColor colorWithRed:0.85 green:0.85 blue:0.85 alpha:1.f];
+        
+        [self.quoteContainerView addSubview:self.quoteLabel];
+        [self.quoteContainerView addSubview:self.quoteDeleteBtn];
+        [self addSubview:self.quoteContainerView];
+        if (updateFrame) {
+            [self extendUp:(size.height + CHAT_INPUT_QUOTE_PADDING)];
+        }
+    } else {
+        CGFloat quoteHeight = self.quoteContainerView.frame.size.height;
+        [self.quoteLabel removeFromSuperview];
+        self.quoteLabel = nil;
+        [self.quoteDeleteBtn removeFromSuperview];
+        self.quoteDeleteBtn = nil;
+        [self.quoteContainerView removeFromSuperview];
+        self.quoteContainerView = nil;
+        if (updateFrame) {
+            [self extendUp: -quoteHeight - CHAT_INPUT_QUOTE_PADDING];
+        }
+    }
+}
+
+- (BOOL)appendQuote:(long long)messageUid {
+    if (self.quoteInfo) {
+        [self clearQuoteInfo];
+        [self updateQuoteView:YES showKeyboard:YES];
+    }
+    self.quoteInfo = [[WFCCQuoteInfo alloc] initWithMessageUid:messageUid];
+    [self updateQuoteView:YES showKeyboard:YES];
+    return self.quoteInfo != nil;
+}
+
+- (void)extendUp:(CGFloat)diff {
+    CGRect baseFrame = self.frame;
+    CGRect voiceFrame = self.voiceSwitchBtn.frame;
+    CGRect emojFrame = self.emojSwitchBtn.frame;
+    CGRect extendFrame = self.pluginSwitchBtn.frame;
+    
+    baseFrame.size.height += diff;
+    baseFrame.origin.y -= diff;
+    
+    voiceFrame.origin.y += diff;
+    emojFrame.origin.y += diff;
+    extendFrame.origin.y += diff;
+    
+    [UIView animateWithDuration:0.5 animations:^{
+        self.frame = baseFrame;
+        self.voiceSwitchBtn.frame = voiceFrame;
+        self.emojSwitchBtn.frame = emojFrame;
+        self.pluginSwitchBtn.frame = extendFrame;
+    }];
+    [self.delegate willChangeFrame:baseFrame withDuration:0.5 keyboardShowing:YES];
 }
 
 - (void)paste:(id)sender {
@@ -747,8 +893,10 @@
 }
 
 - (void)sendAndCleanTextView {
-    [self.delegate didTouchSend:self.textInputView.text withMentionInfos:self.mentionInfos];
+    [self.delegate didTouchSend:self.textInputView.text withMentionInfos:self.mentionInfos withQuoteInfo:self.quoteInfo];
     self.textInputView.text = nil;
+    [self clearQuoteInfo];
+    [self updateQuoteView:NO showKeyboard:YES];
     [self.mentionInfos removeAllObjects];
     [self changeTextViewHeight:32 needUpdateText:NO updateRange:NSMakeRange(0, 0)];
 }
@@ -865,25 +1013,34 @@
     CGRect extendFrame = self.pluginSwitchBtn.frame;
     
     CGFloat diff = 0;
+    CGFloat quoteHeight = 0;
+    if (self.quoteContainerView) {
+        quoteHeight = self.quoteContainerView.frame.size.height + CHAT_INPUT_QUOTE_PADDING;
+    }
     if (height <= 32.f) {
         tvFrame.size.height = 32.f;
-        diff = (48.f - baseFrame.size.height);
+        diff = (48.f - baseFrame.size.height + quoteHeight);
         baseFrame.size.height = 48.f;
     } else if (height > 32.f && height < 50.f) {
         tvFrame.size.height = 50.f;
-        diff = (66.f - baseFrame.size.height);
+        diff = (66.f - baseFrame.size.height + quoteHeight);
         baseFrame.size.height = 66.f;
     } else {
         tvFrame.size.height = 65.f;
-        diff = (81.f - baseFrame.size.height);
+        diff = (81.f - baseFrame.size.height + quoteHeight);
         baseFrame.size.height = 81.f;
+    }
+    if (self.quoteContainerView) {
+        baseFrame.size.height += quoteHeight;
+        CGRect quoteFrame = self.quoteContainerView.frame;
+        quoteFrame.origin.y = tvFrame.origin.y + tvFrame.size.height + CHAT_INPUT_QUOTE_PADDING;
+        self.quoteContainerView.frame = quoteFrame;
     }
     
     baseFrame.origin.y -= diff;
     voiceFrame.origin.y += diff;
     emojFrame.origin.y += diff;
     extendFrame.origin.y += diff;
-    
     
     float duration = 0.5f;
     [self.delegate willChangeFrame:baseFrame withDuration:duration keyboardShowing:YES];
@@ -948,30 +1105,24 @@
 - (void)onItemClicked:(NSUInteger)itemTag {
     UINavigationController *navi = [self.delegate requireNavi];
   
+    __weak typeof(self)weakself = self;
     self.inputBarStatus = ChatInputBarDefaultStatus;
     if (itemTag == 1) {
-#if 0
-        UIImagePickerController *picker = [[UIImagePickerController alloc] init];
-        picker.delegate = self;
-#if TARGET_IPHONE_SIMULATOR
-        picker.sourceType = UIImagePickerControllerSourceTypePhotoLibrary;
-#else
-        if (itemTag == 1) {
-            picker.sourceType = UIImagePickerControllerSourceTypePhotoLibrary;
-        } else if(itemTag == 2){
-            picker.sourceType = UIImagePickerControllerSourceTypeCamera;
-        }
-#endif
-        picker.videoExportPreset = AVAssetExportPresetPassthrough;
-        picker.mediaTypes = [UIImagePickerController availableMediaTypesForSourceType:picker.sourceType];
-        [navi presentViewController:picker animated:YES completion:nil];
-        [self checkAndAlertCameraAccessRight];
-#else
-        DNImagePickerController *imagePicker = [[DNImagePickerController alloc] init];
-        imagePicker.imagePickerDelegate = self;
-        imagePicker.modalPresentationStyle = UIModalPresentationFullScreen;
-        [navi presentViewController:imagePicker animated:YES completion:nil];
-#endif
+        [ZLPhotoConfiguration default].allowSelectImage = YES;
+        [ZLPhotoConfiguration default].allowSelectVideo = YES;
+        [ZLPhotoConfiguration default].maxSelectCount = 9;
+        [ZLPhotoConfiguration default].allowMixSelect = false;
+        [ZLPhotoConfiguration default].allowTakePhotoInLibrary = false;
+        [ZLPhotoConfiguration default].allowEditImage = true;
+        [ZLPhotoConfiguration default].allowEditVideo = true;
+        
+        ZLPhotoPreviewSheet *ps = [[ZLPhotoPreviewSheet alloc] initWithSelectedAssets:@[]];
+        ps.selectImageBlock = ^(NSArray<UIImage *> * _Nonnull images, NSArray<PHAsset *> * _Nonnull assets, BOOL isOriginal) {
+            NSMutableArray *photos = [[NSMutableArray alloc] init];
+            [photos addObjectsFromArray:assets];
+            [weakself recursiveHandle:photos isFullImage:isOriginal];
+        };
+        [ps showPhotoLibraryWithSender:[self.delegate requireNavi]];
     } else if(itemTag == 2) {
 #if TARGET_IPHONE_SIMULATOR
         [self makeToast:@"模拟器不支持相机" duration:1 position:CSToastPositionCenter];
@@ -979,12 +1130,31 @@
         picker.delegate = self;
         picker.sourceType = UIImagePickerControllerSourceTypePhotoLibrary;
         [navi presentViewController:picker animated:YES completion:nil];
-        [self checkAndAlertCameraAccessRight];
 #else
-        KZVideoViewController *videoVC = [[KZVideoViewController alloc] init];
-        videoVC.delegate = self;
-        [videoVC startAnimationWithType:KZVideoViewShowTypeSingle selectExist:NO];
-        double now = [[NSDate date] timeIntervalSince1970];
+        [self checkAndAlertCameraAccessRight];
+        
+        [ZLPhotoConfiguration default].allowEditVideo = YES;
+        ZLCustomCamera *cc = [[ZLCustomCamera alloc] init];
+        cc.takeDoneBlock = ^(UIImage * _Nullable image, NSURL * _Nullable url) {
+            NSLog(@"select the image");
+            if (image) {
+                [self.delegate imageDidCapture:image];
+            } else {
+                NSData *data = [[NSData alloc] initWithContentsOfURL:url];
+                NSString *cacheDir = [[WFCUConfigManager globalManager] cachePathOf:self.conversation mediaType:Media_Type_VIDEO];
+                NSString *desFileName = [cacheDir stringByAppendingPathComponent:[url lastPathComponent]];
+                [data writeToFile:desFileName atomically:YES];
+                
+                UIImage *thumb = [self getVideoThumbnailWithUrl:url second:1];
+                
+                AVURLAsset * asset = [AVURLAsset assetWithURL:url];
+                CMTime   time = [asset duration];
+                int seconds = ceil(time.value/time.timescale);
+                
+                [self.delegate videoDidCapture:desFileName thumbnail:thumb duration:seconds];
+            }
+        };
+        [[self.delegate requireNavi] showDetailViewController:cc sender:nil];
         [self notifyTyping:2];
 #endif
     } else if(itemTag == 3){
@@ -1097,11 +1267,57 @@
     }
 }
 
+#define k_THUMBNAIL_IMG_WIDTH  120//缩略图及cell大小
+#define k_FPS 1//一秒想取多少帧
+
+//这本来是个异步调用，但写成这种方便大家看和复制来直接测试
+- (UIImage*)getVideoThumbnailWithUrl:(NSURL*)videoUrl second:(CGFloat)second
+{
+    if (!videoUrl)
+    {
+        NSLog(@"WARNING:videoUrl为空");
+        return nil;
+    }
+    AVURLAsset *urlSet = [AVURLAsset assetWithURL:videoUrl];
+    AVAssetImageGenerator *imageGenerator = [AVAssetImageGenerator assetImageGeneratorWithAsset:urlSet];
+    imageGenerator.appliesPreferredTrackTransform = YES;
+    imageGenerator.apertureMode = AVAssetImageGeneratorApertureModeEncodedPixels;
+    
+    /*
+     如果不需要获取缩略图，就设置为NO，如果需要获取缩略图，则maximumSize为获取的最大尺寸。
+     以BBC为例，getThumbnail = NO时，打印宽高数据为：1920*1072。
+     getThumbnail = YES时，maximumSize为100*100。打印宽高数据为：100*55.
+     注：不乘[UIScreen mainScreen].scale，会发现缩略图在100*100很虚。
+     */
+    BOOL getThumbnail = YES;
+    if (getThumbnail)
+    {
+        CGFloat width = [UIScreen mainScreen].scale * k_THUMBNAIL_IMG_WIDTH;
+        imageGenerator.maximumSize =  CGSizeMake(width, width);
+    }
+    NSError *error = nil;
+    CMTime time = CMTimeMake(second,k_FPS);
+    CMTime actucalTime;
+    CGImageRef cgImage = [imageGenerator copyCGImageAtTime:time actualTime:&actucalTime error:&error];
+    if (error) {
+        NSLog(@"ERROR:获取视频图片失败,%@",error.domain);
+    }
+    CMTimeShow(actucalTime);
+    UIImage *image = [UIImage imageWithCGImage:cgImage];
+    NSLog(@"imageWidth=%f,imageHeight=%f",image.size.width,image.size.height);
+    CGImageRelease(cgImage);
+    return image;
+}
+
 #pragma mark  UIDocumentDelegate 文件选择回调
 - (void)documentPicker:(UIDocumentPickerViewController *)controller didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls {
-
+    [controller dismissViewControllerAnimated:NO completion:nil];
     __block NSMutableArray *arr = [NSMutableArray array];
 
+    [MBProgressHUD showHUDAddedTo:self.parentView animated:YES];
+    [MBProgressHUD HUDForView:self.parentView].mode = MBProgressHUDModeDeterminate;
+    [MBProgressHUD HUDForView:self.parentView].label.text = @"正在处理中...";
+    
     for (NSURL *url in urls) {
        //获取授权
        BOOL fileUrlAuthozied = [url startAccessingSecurityScopedResource];
@@ -1113,30 +1329,8 @@
            [fileCoordinator coordinateReadingItemAtURL:url options:0 error:&error byAccessor:^(NSURL *newURL) {
                if (!error) {
                    NSData *fileData = [NSData dataWithContentsOfURL:newURL];
-                   NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
-                   NSString *documentPath = [paths lastObject];
-                   NSString *tempDir = [documentPath stringByAppendingPathComponent:@"wf_send_files"];
-                   NSFileManager *fileManager = [NSFileManager defaultManager];
-                   
-                   bool isDir = NO;
-                   if (![fileManager fileExistsAtPath:tempDir isDirectory:&isDir]) {
-                       isDir = YES;
-                       NSError *err;
-                       if(![fileManager createDirectoryAtPath:tempDir withIntermediateDirectories:YES attributes:nil error:&err]) {
-                           NSLog(@"Error, create temp folder error");
-                           return;
-                       }
-                       if (err) {
-                           NSLog(@"Error, create temp folder error:%@", err);
-                           return;
-                       }
-                   }
-                   if (!isDir) {
-                       NSLog(@"Error, create temp folder error");
-                       return;
-                   }
-
-                   NSString *desFileName = [tempDir stringByAppendingPathComponent:[newURL lastPathComponent]];
+                   NSString *cacheDir = [[WFCUConfigManager globalManager] cachePathOf:self.conversation mediaType:Media_Type_FILE];
+                   NSString *desFileName = [cacheDir stringByAppendingPathComponent:[newURL lastPathComponent]];
                    [fileData writeToFile:desFileName atomically:YES];
                    [arr addObject:desFileName];
                }
@@ -1148,7 +1342,7 @@
            NSLog(@"授权失败");
        }
     }
-
+    [MBProgressHUD hideHUDForView:self.parentView animated:YES];
     [self.delegate didSelectFiles:arr];
 }
 
@@ -1260,18 +1454,6 @@
     }
 }
 
-#pragma mark - KZVideoViewControllerDelegate
-- (void)videoViewController:(KZVideoViewController *)videoController didCaptureImage:(UIImage *)image {
-    [self.delegate imageDidCapture:image];
-}
-- (void)videoViewController:(KZVideoViewController *)videoController didRecordVideo:(KZVideoModel *)videoModel {
-    [self.delegate videoDidCapture:videoModel.videoAbsolutePath thumbnail:[UIImage imageWithContentsOfFile:videoModel.thumAbsolutePath] duration:10];
-}
-
-- (void)videoViewControllerDidCancel:(KZVideoViewController *)videoController {
-
-}
-
 #pragma mark - WFCUMentionUserDelegate
 - (void)didMentionType:(int)type user:(NSString *)userId range:(NSRange)range text:(NSString *)text {
     [self textView:self.textInputView shouldChangeTextInRange:NSMakeRange(range.location, 0) replacementText:text];
@@ -1316,19 +1498,6 @@
         }
     });
 }
-#pragma mark - DNImagePickerControllerDelegate
-- (void)dnImagePickerController:(DNImagePickerController *)imagePicker
-                     sendImages:(NSArray *)images
-                    isFullImage:(BOOL)isFullImage {
-    MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:self.parentView animated:YES];
-    hud.label.text = @"处理中...";
-    [hud showAnimated:YES];
-    [self recursiveHandle:images isFullImage:isFullImage];
-}
-
-- (void)dnImagePickerControllerDidCancel:(DNImagePickerController *)imagePicker {
-    [imagePicker dismissViewControllerAnimated:YES completion:nil];
-}
 
 - (void)convertAvcompositionToAvasset:(AVComposition *)composition completion:(void (^)(AVAsset *asset))completion {
     // 导出视频
@@ -1365,7 +1534,7 @@
         });
     }
 }
-- (void)handleVideo:(NSURL *)url photos:(NSMutableArray<DNAsset *> *)photos isFullImage:(BOOL)isFullImage {
+- (void)handleVideo:(NSURL *)url photos:(NSMutableArray<PHAsset *> *)photos isFullImage:(BOOL)isFullImage {
     AVURLAsset *asset1 = [[AVURLAsset alloc] initWithURL:url options:nil];
     AVAssetImageGenerator *generate1 = [[AVAssetImageGenerator alloc] initWithAsset:asset1];
     generate1.appliesPreferredTrackTransform = YES;
@@ -1402,6 +1571,8 @@
 
     exportSession.shouldOptimizeForNetworkUse = YES;
 
+    CMTime time2 = [asset1 duration];
+    int seconds = ceil(time2.value/time2.timescale);
     __weak typeof(self)ws = self;
     [exportSession exportAsynchronouslyWithCompletionHandler:^(void)
      {
@@ -1410,7 +1581,7 @@
              float memorySize = (float)data.length / 1024 / 1024;
              NSLog(@"视频压缩后大小 %f", memorySize);
              dispatch_async(dispatch_get_main_queue(), ^{
-                 [ws.delegate videoDidCapture:resultPath thumbnail:thumbnail duration:10];
+                 [ws.delegate videoDidCapture:resultPath thumbnail:thumbnail duration:seconds];
              });
              [ws recursiveHandle:photos isFullImage:isFullImage];
          } else {
@@ -1421,20 +1592,19 @@
 
      }];
 }
-- (void)recursiveHandle:(NSMutableArray<DNAsset *> *)photos isFullImage:(BOOL)isFullImage {
+- (void)recursiveHandle:(NSMutableArray<PHAsset *> *)photos isFullImage:(BOOL)isFullImage {
     if (photos.count == 0) {
         dispatch_async(dispatch_get_main_queue(), ^{
             [MBProgressHUD hideHUDForView:self.parentView animated:YES];
         });
     }else{
-        DNAsset *item = photos[0];
+        PHAsset *phAsset = photos[0];
         [photos removeObjectAtIndex:0];
         __weak typeof(self) weakself = self;
-        if (item.asset.mediaType == PHAssetMediaTypeVideo) {
+        if (phAsset.mediaType == PHAssetMediaTypeVideo) {
             PHVideoRequestOptions *options = [[PHVideoRequestOptions alloc] init];
             options.version = PHImageRequestOptionsVersionCurrent;
             options.deliveryMode = PHVideoRequestOptionsDeliveryModeAutomatic;
-            PHAsset *phAsset = item.asset;
             
             PHImageManager *manager = [PHImageManager defaultManager];
             [manager requestAVAssetForVideo:phAsset options:options resultHandler:^(AVAsset * _Nullable asset, AVAudioMix * _Nullable audioMix, NSDictionary * _Nullable info) {
@@ -1451,13 +1621,13 @@
                 
                 
             }];
-        } else if(item.asset.mediaType == PHAssetMediaTypeImage) {
+        } else if(phAsset.mediaType == PHAssetMediaTypeImage) {
             PHImageRequestOptions *imageRequestOption = [[PHImageRequestOptions alloc] init];
             imageRequestOption.networkAccessAllowed = YES;
             PHCachingImageManager *cachingImageManager = [[PHCachingImageManager alloc] init];
             cachingImageManager.allowsCachingHighQualityImages = NO;
             [cachingImageManager
-             requestImageDataForAsset:item.asset
+             requestImageDataForAsset:phAsset
              
              options:imageRequestOption
              

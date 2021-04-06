@@ -9,6 +9,7 @@
 "Ok"="Ok";
 "Cancel"="Cancel";
 "Message"="Message";
+"NumberOfMessage"="Message(%d)";
 "GroupName"="Group name";
 "Back"="Back";
 "BackMore"="Back(...)";
@@ -59,6 +60,8 @@
 "SendFailure"="Send failure！";
 "Done"="Done";
 "OpenInBrowser"="Open in browser";
+"SendToFriend"="Send to friends";
+"SendToMoments"="Send to moments";
 "DeleteFriend"="Delete friend";
 "SetAlias"="Set alias";
 "RemoveFromBlacklist"="Remove from black list";
@@ -209,9 +212,10 @@
 "GroupAnnouncement"="Group announcement";
 "HoldToTalk"="Hold to talk";
 "VideoClosed"="Video closed";
-"Rebot"="Rebot";
+"Robot"="Robot";
 "UserInfomation"="User infomation";
 "MultiSelect"="Multi select";
+"Quote"="Quote";
 "albumTitle" = "Photos";
 "cancel" = "Cancel";
 "send" = "send";
@@ -221,4 +225,9 @@
 "alertContent" = "Can not select more than 9 photos";
 "alertButton" = "OK";
 "UnAuthorizedTip" = "Allow %@ to access your album in \"Settings\"->\"Privacy\"->\"Photos\"";
-"GroupFiles" = "Group files";
+"ConvFiles" = "Conversation files";
+"last_read_here"="Last read here";
+"Favorite"="Favorite";
+"重新编辑"="Reedit";
+"你撤回了一条消息"="You recall a message. ";
+"%@撤回了一条消息"="%@ recall a message. ";

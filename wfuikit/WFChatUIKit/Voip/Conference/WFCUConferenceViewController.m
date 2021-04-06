@@ -23,30 +23,33 @@
 #import "WFCUSeletedUserViewController.h"
 #import "UIView+Toast.h"
 #import "WFCUConferenceInviteViewController.h"
+#import "WFCUConferenceMemberManagerViewController.h"
+#import "WFCUConferenceManager.h"
 
 
+#define BOTTOM_BAR_HEIGHT  54
 @interface WFCUConferenceViewController () <UITextFieldDelegate
 #if WFCU_SUPPORT_VOIP
     ,WFAVCallSessionDelegate
 #endif
     ,UICollectionViewDataSource
     ,UICollectionViewDelegate
+    ,WFCUConferenceManagerDelegate
 >
 #if WFCU_SUPPORT_VOIP
 @property (nonatomic, strong) UIView *bigVideoView;
+@property (nonatomic, strong) UIImageView *bigVideoPortraitView;
 @property (nonatomic, strong) UICollectionView *smallCollectionView;
 
 @property (nonatomic, strong) UICollectionView *portraitCollectionView;
 @property (nonatomic, strong) UIButton *hangupButton;
-@property (nonatomic, strong) UIButton *answerButton;
 @property (nonatomic, strong) UIButton *switchCameraButton;
 @property (nonatomic, strong) UIButton *audioButton;
 @property (nonatomic, strong) UIButton *speakerButton;
 @property (nonatomic, strong) UIButton *videoButton;
 @property (nonatomic, strong) UIButton *scalingButton;
-
 @property (nonatomic, strong) UIButton *minimizeButton;
-@property (nonatomic, strong) UIButton *addParticipantButton;
+@property (nonatomic, strong) UIButton *managerButton;
 
 @property (nonatomic, strong) UIImageView *portraitView;
 @property (nonatomic, strong) UILabel *userNameLabel;
@@ -69,6 +72,8 @@
 @property (nonatomic, strong)UIImageView *speakingView;
 
 @property (nonatomic, strong)NSString *focusUser;
+
+@property(nonatomic, strong)UIView *bottomBarView;
 
 #endif
 @end
@@ -125,9 +130,9 @@
     }
     return self;
 }
-- (instancetype)initWithCallId:(NSString *_Nonnull)callId
+- (instancetype)initWithCallId:(NSString *_Nullable)callId
                      audioOnly:(BOOL)audioOnly
-                           pin:(NSString *_Nonnull)pin
+                           pin:(NSString *_Nullable)pin
                           host:(NSString *_Nullable)host
                          title:(NSString *_Nullable)title
                           desc:(NSString *_Nullable)desc
@@ -136,7 +141,7 @@
     self = [super init];
     if (self) {
         if (moCall) {
-            self.currentSession = [[WFAVEngineKit sharedEngineKit] startConference:nil audioOnly:audioOnly pin:pin host:host title:title desc:desc audience:audience sessionDelegate:self];
+            self.currentSession = [[WFAVEngineKit sharedEngineKit] startConference:callId audioOnly:audioOnly pin:pin host:host title:title desc:desc audience:audience sessionDelegate:self];
             
             [self didChangeState:kWFAVEngineStateOutgoing];
         } else {
@@ -175,8 +180,11 @@
             [self.participants addObject:p.userId];
         }
     }
-    
-    [self.participants addObject:[WFCCNetworkService sharedInstance].userId];
+    if(self.currentSession.isAudience) {
+        [self.audiences addObject:[WFCCNetworkService sharedInstance].userId];
+    } else {
+        [self.participants addObject:[WFCCNetworkService sharedInstance].userId];
+    }
     
     if (self.focusUser && [self.participants containsObject:self.focusUser]) {
         if ([self.participants containsObject:self.currentSession.host]) {
@@ -191,21 +199,28 @@
             [self.participants addObject:self.currentSession.host];
         }
     }
+    [self.managerButton setTitle:[NSString stringWithFormat:@"管理(%ld)", self.participants.count + self.audiences.count] forState:UIControlStateNormal];
+    [self.managerButton setTitleEdgeInsets:UIEdgeInsetsMake((self.managerButton.imageView.frame.size.height+24)/2 ,-self.managerButton.imageView.frame.size.width, 0.0,0.0)];
 }
 
 - (void)viewDidLoad {
     [super viewDidLoad];
     [self.view setBackgroundColor:[UIColor blackColor]];
     
+    UICollectionViewFlowLayout *layout = [[UICollectionViewFlowLayout alloc] init];
+    CGFloat itemWidth = (self.view.frame.size.width + layout.minimumLineSpacing)/3 - layout.minimumLineSpacing;
+    
     self.smallScalingType = kWFAVVideoScalingTypeAspectFit;
     self.bigScalingType = kWFAVVideoScalingTypeAspectFit;
     self.bigVideoView = [[UIView alloc] initWithFrame:self.view.bounds];
     UITapGestureRecognizer *tapBigVideo = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(onClickedBigVideoView:)];
     [self.bigVideoView addGestureRecognizer:tapBigVideo];
+    self.bigVideoPortraitView = [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, itemWidth, itemWidth)];
+    self.bigVideoPortraitView.center = self.bigVideoView.center;
+    [self.bigVideoView addSubview:self.bigVideoPortraitView];
     [self.view addSubview:self.bigVideoView];
     
-    UICollectionViewFlowLayout *layout = [[UICollectionViewFlowLayout alloc] init];
-    CGFloat itemWidth = (self.view.frame.size.width + layout.minimumLineSpacing)/3 - layout.minimumLineSpacing;
+    
     layout.itemSize = CGSizeMake(itemWidth, itemWidth);
     layout.scrollDirection = UICollectionViewScrollDirectionHorizontal;
     int lines = (int)([self.currentSession participantIds].count + 2) /3;
@@ -280,42 +295,14 @@
                                                  name:UIDeviceOrientationDidChangeNotification
                                                object:nil];
     [self onDeviceOrientationDidChange];
-
-}
-
-- (UIButton *)hangupButton {
-    if (!_hangupButton) {
-        _hangupButton = [[UIButton alloc] init];
-        [_hangupButton setImage:[UIImage imageNamed:@"hangup"] forState:UIControlStateNormal];
-        [_hangupButton setImage:[UIImage imageNamed:@"hangup_hover"] forState:UIControlStateHighlighted];
-        [_hangupButton setImage:[UIImage imageNamed:@"hangup_hover"] forState:UIControlStateSelected];
-        _hangupButton.backgroundColor = [UIColor clearColor];
-        [_hangupButton addTarget:self action:@selector(hanupButtonDidTap:) forControlEvents:UIControlEventTouchDown];
-        _hangupButton.hidden = YES;
-        [self.view addSubview:_hangupButton];
-    }
-    return _hangupButton;
-}
-
-- (UIButton *)answerButton {
-    if (!_answerButton) {
-        _answerButton = [[UIButton alloc] init];
-        
-        [_answerButton setImage:[UIImage imageNamed:@"answer"] forState:UIControlStateNormal];
-        [_answerButton setImage:[UIImage imageNamed:@"answer_hover"] forState:UIControlStateHighlighted];
-        [_answerButton setImage:[UIImage imageNamed:@"answer_hover"] forState:UIControlStateSelected];
-        
-        _answerButton.backgroundColor = [UIColor clearColor];
-        [_answerButton addTarget:self action:@selector(answerButtonDidTap:) forControlEvents:UIControlEventTouchDown];
-        _answerButton.hidden = YES;
-        [self.view addSubview:_answerButton];
-    }
-    return _answerButton;
+    self.bottomBarView.hidden = NO;
+    
+    [WFCUConferenceManager sharedInstance].delegate = self;
 }
 
 - (UIButton *)minimizeButton {
     if (!_minimizeButton) {
-        _minimizeButton = [[UIButton alloc] initWithFrame:CGRectMake(16, 26, 30, 30)];
+        _minimizeButton = [[UIButton alloc] initWithFrame:CGRectMake(16, 26+kStatusBarAndNavigationBarHeight-64, 30, 30)];
         
         [_minimizeButton setImage:[UIImage imageNamed:@"minimize"] forState:UIControlStateNormal];
         [_minimizeButton setImage:[UIImage imageNamed:@"minimize_hover"] forState:UIControlStateHighlighted];
@@ -329,25 +316,9 @@
     return _minimizeButton;
 }
 
-- (UIButton *)addParticipantButton {
-    if (!_addParticipantButton) {
-        _addParticipantButton = [[UIButton alloc] initWithFrame:CGRectMake(self.view.frame.size.width - 16 - 30, 26, 30, 30)];
-        
-        [_addParticipantButton setImage:[UIImage imageNamed:@"plus-circle"] forState:UIControlStateNormal];
-        [_addParticipantButton setImage:[UIImage imageNamed:@"plus-circle"] forState:UIControlStateHighlighted];
-        [_addParticipantButton setImage:[UIImage imageNamed:@"plus-circle"] forState:UIControlStateSelected];
-        
-        _addParticipantButton.backgroundColor = [UIColor clearColor];
-        [_addParticipantButton addTarget:self action:@selector(addParticipantButtonDidTap:) forControlEvents:UIControlEventTouchDown];
-        _addParticipantButton.hidden = YES;
-        [self.view addSubview:_addParticipantButton];
-    }
-    return _addParticipantButton;
-}
-
 - (UIButton *)switchCameraButton {
     if (!_switchCameraButton) {
-        _switchCameraButton = [[UIButton alloc] init];
+        _switchCameraButton = [[UIButton alloc] initWithFrame:CGRectMake(self.view.frame.size.width - 16 - 30, 26+kStatusBarAndNavigationBarHeight-64, 30, 30)];
         [_switchCameraButton setImage:[UIImage imageNamed:@"switchcamera"] forState:UIControlStateNormal];
         [_switchCameraButton setImage:[UIImage imageNamed:@"switchcamera_hover"] forState:UIControlStateHighlighted];
         [_switchCameraButton setImage:[UIImage imageNamed:@"switchcamera_hover"] forState:UIControlStateSelected];
@@ -357,48 +328,6 @@
         [self.view addSubview:_switchCameraButton];
     }
     return _switchCameraButton;
-}
-
-- (UIButton *)audioButton {
-    if (!_audioButton) {
-        _audioButton = [[UIButton alloc] initWithFrame:CGRectMake(self.view.frame.size.width/2-ButtonSize/2, self.view.frame.size.height-10-ButtonSize, ButtonSize, ButtonSize)];
-        [_audioButton setImage:[UIImage imageNamed:@"mute"] forState:UIControlStateNormal];
-        [_audioButton setImage:[UIImage imageNamed:@"mute_hover"] forState:UIControlStateHighlighted];
-        [_audioButton setImage:[UIImage imageNamed:@"mute_hover"] forState:UIControlStateSelected];
-        _audioButton.backgroundColor = [UIColor clearColor];
-        [_audioButton addTarget:self action:@selector(audioButtonDidTap:) forControlEvents:UIControlEventTouchDown];
-        _audioButton.hidden = YES;
-        [self updateAudioButton];
-        [self.view addSubview:_audioButton];
-    }
-    return _audioButton;
-}
-- (UIButton *)speakerButton {
-    if (!_speakerButton) {
-        _speakerButton = [[UIButton alloc] initWithFrame:CGRectMake(self.view.frame.size.width/2-ButtonSize/2, self.view.frame.size.height-10-ButtonSize, ButtonSize, ButtonSize)];
-        [_speakerButton setImage:[UIImage imageNamed:@"speaker"] forState:UIControlStateNormal];
-        [_speakerButton setImage:[UIImage imageNamed:@"speaker_hover"] forState:UIControlStateHighlighted];
-        [_speakerButton setImage:[UIImage imageNamed:@"speaker_hover"] forState:UIControlStateSelected];
-        _speakerButton.backgroundColor = [UIColor clearColor];
-        [_speakerButton addTarget:self action:@selector(speakerButtonDidTap:) forControlEvents:UIControlEventTouchDown];
-        _speakerButton.hidden = YES;
-        [self.view addSubview:_speakerButton];
-    }
-    return _speakerButton;
-}
-
-- (UIButton *)videoButton {
-    if (!_videoButton) {
-        _videoButton = [[UIButton alloc] initWithFrame:CGRectMake(self.view.frame.size.width*3/4-ButtonSize/4, self.view.frame.size.height-45-ButtonSize-ButtonSize/2-2, ButtonSize/2, ButtonSize/2)];
-        
-        [_videoButton setImage:[UIImage imageNamed:@"enable_video"] forState:UIControlStateNormal];
-        _videoButton.backgroundColor = [UIColor clearColor];
-        [_videoButton addTarget:self action:@selector(videoButtonDidTap:) forControlEvents:UIControlEventTouchDown];
-        _videoButton.hidden = YES;
-        [self updateVideoButton];
-        [self.view addSubview:_videoButton];
-    }
-    return _videoButton;
 }
 
 - (UIButton *)scalingButton {
@@ -424,6 +353,49 @@
         [self.bigVideoView addSubview:_speakingView];
     }
     return _speakingView;
+}
+
+- (UIButton *)createBarButtom:(NSString *)title imageName:(NSString *)imageName selectedImageName:(NSString *)selectedImageName select:(SEL)selector frame:(CGRect)frame {
+    UIButton *btn = [[UIButton alloc] initWithFrame:frame];
+    btn.clipsToBounds = YES;
+    [btn setImage:[UIImage imageNamed:imageName] forState:UIControlStateNormal];
+    [btn setTitle:title forState:UIControlStateNormal];
+    btn.contentHorizontalAlignment = UIControlContentHorizontalAlignmentCenter;
+    btn.titleLabel.font = [UIFont systemFontOfSize:12];
+    [btn setTitleEdgeInsets:UIEdgeInsetsMake((btn.imageView.frame.size.height+24)/2 ,-btn.imageView.frame.size.width, 0.0,0.0)];
+    [btn setImageEdgeInsets:UIEdgeInsetsMake((-btn.titleLabel.frame.size.height-24)/2, 0.0,0.0, -btn.titleLabel.bounds.size.width)];
+    [btn setTitleColor:[UIColor colorWithRed:0.85 green:0.85 blue:0.85 alpha:1] forState:UIControlStateNormal];
+    [btn addTarget:self action:selector forControlEvents:UIControlEventTouchUpInside];
+    [btn setImage:[UIImage imageNamed:selectedImageName] forState:UIControlStateHighlighted];
+    [btn setImage:[UIImage imageNamed:selectedImageName] forState:UIControlStateSelected];
+    return btn;
+}
+
+- (UIView *)bottomBarView {
+    if(!_bottomBarView) {
+        _bottomBarView = [[UIView alloc] initWithFrame:CGRectMake(0, self.view.bounds.size.height - kTabbarSafeBottomMargin-BOTTOM_BAR_HEIGHT, self.view.bounds.size.width, BOTTOM_BAR_HEIGHT+kTabbarSafeBottomMargin)];
+        _bottomBarView.backgroundColor = [UIColor colorWithRed:0.5 green:0.5 blue:0.5 alpha:0.5];
+        CGFloat btnWidth = self.view.bounds.size.width/4;
+        
+        self.audioButton = [self createBarButtom:@"静音" imageName:@"conference_audio" selectedImageName:@"conference_audio" select:@selector(audioButtonDidTap:) frame:CGRectMake(0, 0, btnWidth, BOTTOM_BAR_HEIGHT)];
+        [_bottomBarView addSubview:self.audioButton];
+        
+        self.videoButton = [self createBarButtom:@"视频" imageName:@"conference_video" selectedImageName:@"conference_video" select:@selector(videoButtonDidTap:) frame:CGRectMake(btnWidth, 0, btnWidth, BOTTOM_BAR_HEIGHT)];
+        [_bottomBarView addSubview:self.videoButton];
+        
+        self.speakerButton = [self createBarButtom:@"扬声器" imageName:@"conference_speaker" selectedImageName:@"conference_speaker" select:@selector(speakerButtonDidTap:) frame:CGRectMake(btnWidth, 0, btnWidth, BOTTOM_BAR_HEIGHT)];
+        self.speakerButton.hidden = YES;
+        [_bottomBarView addSubview:self.speakerButton];
+        
+        self.managerButton = [self createBarButtom:[NSString stringWithFormat:@"管理(%ld)", self.participants.count + self.audiences.count] imageName:@"conference_members" selectedImageName:@"conference_members" select:@selector(managerButtonDidTap:) frame:CGRectMake(btnWidth*2, 0, btnWidth, BOTTOM_BAR_HEIGHT)];
+        [_bottomBarView addSubview:self.managerButton];
+        
+        self.hangupButton = [self createBarButtom:@"结束" imageName:@"conference_end_call" selectedImageName:@"conference_end_call" select:@selector(hanupButtonDidTap:) frame:CGRectMake(btnWidth*3, 0, btnWidth, BOTTOM_BAR_HEIGHT)];
+        [_bottomBarView addSubview:self.hangupButton];
+        
+        [self.view addSubview:_bottomBarView];
+    }
+    return _bottomBarView;
 }
 
 - (void)startConnectedTimer {
@@ -461,15 +433,34 @@
 }
 
 - (void)hanupButtonDidTap:(UIButton *)button {
-    if(self.currentSession.state != kWFAVEngineStateIdle) {
-        [self.currentSession endCall];
+    if([self.currentSession.host isEqualToString:[WFCCNetworkService sharedInstance].userId]) {
+        __weak typeof(self)ws = self;
+        UIAlertController *alertController = [UIAlertController alertControllerWithTitle:nil message:@"如果您想让与会人员继续开会，请选择退出会议" preferredStyle:UIAlertControllerStyleAlert];
+        
+        UIAlertAction *action1 = [UIAlertAction actionWithTitle:@"退出会议" style:UIAlertActionStyleCancel handler:^(UIAlertAction *action) {
+            if(ws.currentSession.state != kWFAVEngineStateIdle) {
+                [ws.currentSession leaveConference:NO];
+            }
+        }];
+        [alertController addAction:action1];
+        
+        UIAlertAction *action2 = [UIAlertAction actionWithTitle:@"结束会议" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
+            if(ws.currentSession.state != kWFAVEngineStateIdle) {
+                [ws.currentSession leaveConference:YES];
+            }
+        }];
+        [alertController addAction:action2];
+        
+        [ws presentViewController:alertController animated:YES completion:nil];
+    } else {
+        [self.currentSession leaveConference:NO];
     }
 }
 
-- (void)answerButtonDidTap:(UIButton *)button {
-    if (self.currentSession.state == kWFAVEngineStateIncomming) {
-        [self.currentSession answerCall:NO];
-    }
+- (void)managerButtonDidTap:(UIButton *)button {
+    WFCUConferenceMemberManagerViewController *vc = [[WFCUConferenceMemberManagerViewController alloc] init];
+    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
+    [self presentViewController:nav animated:YES completion:nil];
 }
 
 - (void)minimizeButtonDidTap:(UIButton *)button {
@@ -499,7 +490,6 @@
     pvc.invite = invite;
     
     UINavigationController *navi = [[UINavigationController alloc] initWithRootViewController:pvc];
-    navi.modalPresentationStyle = UIModalPresentationFullScreen;
 
     [self presentViewController:navi animated:YES completion:nil];
 }
@@ -519,10 +509,12 @@
 
 - (void)updateAudioButton {
     if (self.currentSession.audioMuted) {
-        [self.audioButton setImage:[UIImage imageNamed:@"mute_hover"] forState:UIControlStateNormal];
+        [self.audioButton setImage:[UIImage imageNamed:@"conference_audio_mute"] forState:UIControlStateNormal];
     } else {
-        [self.audioButton setImage:[UIImage imageNamed:@"mute"] forState:UIControlStateNormal];
+        [self.audioButton setImage:[UIImage imageNamed:@"conference_audio"] forState:UIControlStateNormal];
     }
+    
+    self.audioButton.enabled = !self.currentSession.audience;
 }
 - (void)speakerButtonDidTap:(UIButton *)button {
     if (self.currentSession.state != kWFAVEngineStateIdle) {
@@ -532,19 +524,26 @@
 }
 
 - (void)updateSpeakerButton {
-    if (!self.currentSession.isSpeaker) {
-        [self.speakerButton setImage:[UIImage imageNamed:@"speaker"] forState:UIControlStateNormal];
+    if([self.currentSession isHeadsetPluggedIn] || [self.currentSession isBluetoothSpeaker]) {
+        self.speakerButton.enabled = NO;
     } else {
-        [self.speakerButton setImage:[UIImage imageNamed:@"speaker_hover"] forState:UIControlStateNormal];
+        self.speakerButton.enabled = YES;
+    }
+    
+    if (!self.currentSession.isSpeaker) {
+        [self.speakerButton setImage:[UIImage imageNamed:@"conference_speaker_disable"] forState:UIControlStateNormal];
+    } else {
+        [self.speakerButton setImage:[UIImage imageNamed:@"conference_speaker"] forState:UIControlStateNormal];
     }
 }
 
 - (void)updateVideoButton {
     if (self.currentSession.videoMuted) {
-        [self.videoButton setImage:[UIImage imageNamed:@"disable_video"] forState:UIControlStateNormal];
+        [self.videoButton setImage:[UIImage imageNamed:@"conference_video_mute"] forState:UIControlStateNormal];
     } else {
-        [self.videoButton setImage:[UIImage imageNamed:@"enable_video"] forState:UIControlStateNormal];
+        [self.videoButton setImage:[UIImage imageNamed:@"conference_video"] forState:UIControlStateNormal];
     }
+    self.videoButton.enabled = !self.currentSession.audience;
 }
 
 //1.决定当前界面是否开启自动转屏，如果返回NO，后面两个方法也不会被调用，只是会支持默认的方向
@@ -702,24 +701,8 @@
 //    }
 }
 
-- (CGRect)getButtomCenterButtonFrame {
-    return CGRectMake(self.view.frame.size.width/2-ButtonSize/2, self.view.frame.size.height-BottomPadding-ButtonSize, ButtonSize, ButtonSize);
-}
-
-- (CGRect)getButtomLeftButtonFrame {
-    return CGRectMake(self.view.frame.size.width/4-ButtonSize/2, self.view.frame.size.height-BottomPadding-ButtonSize, ButtonSize, ButtonSize);
-}
-
-- (CGRect)getButtomRightButtonFrame {
-    return CGRectMake(self.view.frame.size.width*3/4-ButtonSize/2, self.view.frame.size.height-BottomPadding-ButtonSize, ButtonSize, ButtonSize);
-}
-
-- (CGRect)getToAudioButtonFrame {
-    return CGRectMake(self.view.frame.size.width*3/4-ButtonSize/2, self.view.frame.size.height-BottomPadding-ButtonSize-ButtonSize-2, ButtonSize, ButtonSize);
-}
 
 - (void)updateTopViewFrame {
-//    if (self.currentSession.isAudioOnly) {
         CGFloat containerWidth = self.view.bounds.size.width;
         
         self.portraitView.frame = CGRectMake((containerWidth-64)/2, kStatusBarAndNavigationBarHeight, 64, 64);;
@@ -732,20 +715,6 @@
     
         self.stateLabel.frame = CGRectMake((containerWidth - 240)/2, self.smallCollectionView.frame.origin.y + self.smallCollectionView.frame.size.height + 30, 240, 16);
         self.stateLabel.textAlignment = NSTextAlignmentCenter;
-//    } else {
-//        self.portraitView.frame = CGRectMake(16, kStatusBarAndNavigationBarHeight, 64, 64);
-//        self.userNameLabel.frame = CGRectMake(96, kStatusBarAndNavigationBarHeight + 8, 240, 26);
-//        if(![NSThread isMainThread]) {
-//            NSLog(@"error not main thread");
-//        }
-//        self.userNameLabel.textAlignment = NSTextAlignmentLeft;
-//        if(self.currentSession.state == kWFAVEngineStateConnected) {
-//            self.stateLabel.frame = CGRectMake(54, 30, 240, 20);
-//        } else {
-//            self.stateLabel.frame = CGRectMake(96, kStatusBarAndNavigationBarHeight + 26 + 14, 240, 16);
-//        }
-//        self.stateLabel.textAlignment = NSTextAlignmentLeft;
-//    }
 }
 
 - (void)onClickedBigVideoView:(id)sender {
@@ -758,9 +727,12 @@
     }
     
     if (self.smallCollectionView.hidden) {
-        if (self.hangupButton.hidden) {
-            self.hangupButton.hidden = NO;
-            self.audioButton.hidden = NO;
+        if (self.bottomBarView.hidden) {
+            self.bottomBarView.hidden = NO;
+            [UIView animateWithDuration:0.5 animations:^{
+                self.bottomBarView.frame = CGRectMake(0, self.view.bounds.size.height - kTabbarSafeBottomMargin-BOTTOM_BAR_HEIGHT, self.view.bounds.size.width, BOTTOM_BAR_HEIGHT+kTabbarSafeBottomMargin);
+            }];
+            
             if (self.currentSession.audioOnly) {
                 self.videoButton.hidden = YES;
             } else {
@@ -769,14 +741,16 @@
             self.switchCameraButton.hidden = NO;
             self.smallCollectionView.hidden = NO;
             self.minimizeButton.hidden = NO;
-            self.addParticipantButton.hidden = NO;
+            self.connectTimeLabel.hidden = NO;
         } else {
-            self.hangupButton.hidden = YES;
-            self.audioButton.hidden = YES;
-            self.videoButton.hidden = YES;
+            [UIView animateWithDuration:0.5 animations:^{
+                self.bottomBarView.frame = CGRectMake(0, self.view.bounds.size.height, self.view.bounds.size.width, 0);
+            } completion:^(BOOL finished) {
+                self.bottomBarView.hidden = YES;
+            }];
             self.switchCameraButton.hidden = YES;
             self.minimizeButton.hidden = YES;
-            self.addParticipantButton.hidden = NO;
+            self.connectTimeLabel.hidden = YES;
         }
     } else {
         self.smallCollectionView.hidden = YES;
@@ -790,7 +764,6 @@
     }
     switch (state) {
         case kWFAVEngineStateIdle:
-            self.answerButton.hidden = YES;
             self.hangupButton.hidden = YES;
             self.switchCameraButton.hidden = YES;
             self.audioButton.hidden = YES;
@@ -805,25 +778,23 @@
             self.bigVideoView.hidden = YES;
             self.minimizeButton.hidden = YES;
             self.speakerButton.hidden = YES;
-            self.addParticipantButton.hidden = NO;
+            self.managerButton.hidden = YES;
+            self.bottomBarView.hidden = YES;
             [self updateTopViewFrame];
             break;
         case kWFAVEngineStateOutgoing:
-            self.answerButton.hidden = YES;
             self.connectTimeLabel.hidden = YES;
             self.hangupButton.hidden = NO;
-            self.hangupButton.frame = [self getButtomCenterButtonFrame];
             self.switchCameraButton.hidden = YES;
             if (self.currentSession.isAudioOnly) {
                 self.speakerButton.hidden = YES;
                 [self updateSpeakerButton];
-                self.speakerButton.frame = [self getButtomRightButtonFrame];
                 self.audioButton.hidden = YES;
-                self.audioButton.frame = [self getButtomLeftButtonFrame];
             } else {
                 self.speakerButton.hidden = YES;
                 self.audioButton.hidden = YES;
             }
+            self.managerButton.hidden = YES;
             self.videoButton.hidden = YES;
             self.scalingButton.hidden = YES;
             [self.currentSession setupLocalVideoView:self.bigVideoView scalingType:self.bigScalingType];
@@ -835,18 +806,16 @@
             self.userNameLabel.hidden = YES;
             self.portraitView.hidden = YES;
             [self updateTopViewFrame];
-            self.addParticipantButton.hidden = NO;
             
             break;
         case kWFAVEngineStateConnecting:
-            self.answerButton.hidden = YES;
             self.hangupButton.hidden = NO;
             self.speakerButton.hidden = YES;
-            self.hangupButton.frame = [self getButtomCenterButtonFrame];
             self.switchCameraButton.hidden = YES;
             self.audioButton.hidden = YES;
             self.videoButton.hidden = YES;
             self.scalingButton.hidden = YES;
+            self.managerButton.hidden = YES;
             [self.currentSession setupLocalVideoView:self.bigVideoView scalingType:self.bigScalingType];
             if (self.currentSession.audioOnly) {
                 self.smallCollectionView.hidden = YES;
@@ -866,32 +835,25 @@
             self.userNameLabel.hidden = YES;
             break;
         case kWFAVEngineStateConnected:
-            self.answerButton.hidden = YES;
             self.hangupButton.hidden = NO;
             self.connectTimeLabel.hidden = NO;
             self.stateLabel.hidden = YES;
-            self.hangupButton.frame = [self getButtomCenterButtonFrame];
+            self.managerButton.hidden = NO;
             if (self.currentSession.isAudioOnly) {
                 self.speakerButton.hidden = NO;
-                self.speakerButton.frame = [self getButtomRightButtonFrame];
                 [self updateSpeakerButton];
                 self.audioButton.hidden = NO;
-                self.audioButton.frame = [self getButtomLeftButtonFrame];
                 self.switchCameraButton.hidden = YES;
                 self.videoButton.hidden = YES;
             } else {
                 self.speakerButton.hidden = YES;
-                [self.currentSession enableSpeaker:YES];
                 self.audioButton.hidden = NO;
-                self.audioButton.frame = [self getButtomLeftButtonFrame];
                 self.switchCameraButton.hidden = NO;
-                self.switchCameraButton.frame = [self getButtomRightButtonFrame];
                 self.videoButton.hidden = NO;
             }
             
             self.scalingButton.hidden = YES;
             self.minimizeButton.hidden = NO;
-            self.addParticipantButton.hidden = NO;
             
             if (self.currentSession.isAudioOnly) {
                 [self.currentSession setupLocalVideoView:nil scalingType:self.bigScalingType];
@@ -915,24 +877,15 @@
                 self.portraitCollectionView.hidden = YES;
             }
             
-            
-//            if (!_currentSession.isAudioOnly) {
-                self.userNameLabel.hidden = YES;
-                self.portraitView.hidden = YES;
-//            } else {
-//                self.userNameLabel.hidden = NO;
-//                self.portraitView.hidden = NO;
-//            }
+            self.userNameLabel.hidden = YES;
+            self.portraitView.hidden = YES;
             [self updateConnectedTimeLabel];
             [self startConnectedTimer];
             [self updateTopViewFrame];
             break;
         case kWFAVEngineStateIncomming:
             self.connectTimeLabel.hidden = YES;
-            self.answerButton.hidden = NO;
-            self.answerButton.frame = [self getButtomRightButtonFrame];
             self.hangupButton.hidden = NO;
-            self.hangupButton.frame = [self getButtomLeftButtonFrame];
             self.switchCameraButton.hidden = YES;
             self.audioButton.hidden = YES;
             self.videoButton.hidden = YES;
@@ -994,17 +947,29 @@
     }
 }
 - (void)didCallEndWithReason:(WFAVCallEndReason)reason {
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            [[WFAVEngineKit sharedEngineKit] dismissViewController:self];
-    });
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"kConferenceEnded" object:nil];
+    [self.view makeToast:@"会议已结束" duration:1 position:CSToastPositionCenter];
+    if(reason == kWFAVCallEndReasonRoomNotExist) {
+        [self restartConference];
+    } else if(reason == kWFAVCallEndReasonRoomParticipantsFull) {
+        [self rejoinConferenceAsAudience];
+    } else {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                [[WFAVEngineKit sharedEngineKit] dismissViewController:self];
+        });
+    }
 }
 
 - (void)didParticipantJoined:(NSString *)userId {
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"kConferenceMemberChanged" object:nil];
+    
     if ([self.participants containsObject:userId] || [userId isEqualToString:[WFCCNetworkService sharedInstance].userId]) {
         return;
     }
     [self rearrangeParticipants];
     [self reloadVideoUI];
+    WFCCUserInfo *userInfo = [[WFCCIMService sharedWFCIMService] getUserInfo:userId refresh:NO];
+    [self.view makeToast:[NSString stringWithFormat:@"%@ 加入了会议", userInfo.friendAlias.length ? userInfo.friendAlias : userInfo.displayName] duration:1 position:CSToastPositionCenter];
 }
 
 - (void)didParticipantConnected:(NSString *)userId {
@@ -1012,6 +977,8 @@
 }
 
 - (void)didParticipantLeft:(NSString *)userId withReason:(WFAVCallEndReason)reason {
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"kConferenceMemberChanged" object:nil];
+    
     [self rearrangeParticipants];
     [self reloadVideoUI];
     
@@ -1037,7 +1004,9 @@
 }
 
 - (void)didError:(NSError *)error {
-    
+    if([error.domain isEqualToString:@"room_participants_full"]) {
+        [self.view makeToast:@"发言人数已满，无法切换到发言人!" duration:1 position:CSToastPositionCenter];
+    }
 }
 
 - (void)didGetStats:(NSArray *)stats {
@@ -1045,9 +1014,31 @@
 }
 
 - (void)didChangeType:(BOOL)audience ofUser:(NSString *)userId {
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"kConferenceMemberChanged" object:nil];
     [self rearrangeParticipants];
     [self reloadVideoUI];
+    WFCCUserInfo *userInfo = [[WFCCIMService sharedWFCIMService] getUserInfo:userId refresh:NO];
+    if(audience) {
+        [self.view makeToast:[NSString stringWithFormat:@"%@ 结束了互动", userInfo.friendAlias.length ? userInfo.friendAlias : userInfo.displayName] duration:1 position:CSToastPositionCenter];
+    } else {
+        [self.view makeToast:[NSString stringWithFormat:@"%@ 加入了互动", userInfo.friendAlias.length ? userInfo.friendAlias : userInfo.displayName] duration:1 position:CSToastPositionCenter];
+    }
+    
+    if([userId isEqualToString:[WFCCNetworkService sharedInstance].userId]) {
+        [self updateAudioButton];
+        [self updateVideoButton];
+    }
 }
+
+- (void)didChangeAudioRoute {
+    [self updateSpeakerButton];
+}
+
+- (void)didChangeInitiator:(NSString * _Nullable)initiator { 
+    NSLog(@"did change initiator");
+}
+
+
 - (void)checkAVPermission {
     [self checkCapturePermission:nil];
     [self checkRecordPermission:nil];
@@ -1081,6 +1072,85 @@
                 complete(granted);
             }
         }];
+    }
+}
+
+- (void)rejoinConferenceAsAudience {
+    __weak typeof(self)ws = self;
+    UIAlertController *alertController = [UIAlertController alertControllerWithTitle:nil message:@"会议发言人数已满，是否以观众身份入会？" preferredStyle:UIAlertControllerStyleAlert];
+    
+    UIAlertAction *action1 = [UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:^(UIAlertAction *action) {
+        [[WFAVEngineKit sharedEngineKit] dismissViewController:ws];
+    }];
+    [alertController addAction:action1];
+    
+    BOOL audioOnly = self.currentSession.isAudioOnly;
+    NSString *title = self.currentSession.title;
+    NSString *desc = self.currentSession.desc;
+    NSString *conferenceId = self.currentSession.callId;
+    NSString *pin = self.currentSession.pin;
+    NSString *host = self.currentSession.host;
+    
+    
+    UIAlertAction *action2 = [UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
+        [[WFAVEngineKit sharedEngineKit] dismissViewController:ws];
+        
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            WFCUConferenceViewController *vc = [[WFCUConferenceViewController alloc] initWithCallId:conferenceId audioOnly:audioOnly pin:pin host:host title:title desc:desc audience:YES moCall:NO];
+            [[WFAVEngineKit sharedEngineKit] presentViewController:vc];
+        });
+    }];
+    [alertController addAction:action2];
+    
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [ws presentViewController:alertController animated:YES completion:nil];
+    });
+}
+
+- (void)restartConference {
+    if([self.currentSession.host isEqualToString:[WFCCNetworkService sharedInstance].userId]) {
+        __weak typeof(self)ws = self;
+        UIAlertController *alertController = [UIAlertController alertControllerWithTitle:nil message:@"会议未开始或者已经结束，请点击启动来开始会议" preferredStyle:UIAlertControllerStyleAlert];
+        
+        UIAlertAction *action1 = [UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:^(UIAlertAction *action) {
+            [[WFAVEngineKit sharedEngineKit] dismissViewController:ws];
+        }];
+        [alertController addAction:action1];
+        
+        BOOL audioOnly = self.currentSession.isAudioOnly;
+        BOOL defaultAudience = self.currentSession.defaultAudience;
+        NSString *title = self.currentSession.title;
+        NSString *desc = self.currentSession.desc;
+        NSString *conferenceId = self.currentSession.callId;
+        NSString *pin = self.currentSession.pin;
+        
+        
+        UIAlertAction *action2 = [UIAlertAction actionWithTitle:@"启动" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
+            [[WFAVEngineKit sharedEngineKit] dismissViewController:ws];
+            
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                WFCUConferenceViewController *vc = [[WFCUConferenceViewController alloc] initWithCallId:conferenceId audioOnly:audioOnly pin:pin host:[WFCCNetworkService sharedInstance].userId title:title desc:desc audience:defaultAudience moCall:YES];
+                [[WFAVEngineKit sharedEngineKit] presentViewController:vc];
+            });
+        }];
+        [alertController addAction:action2];
+        
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [ws presentViewController:alertController animated:YES completion:nil];
+        });
+    } else {
+        WFCCUserInfo *userInfo = [[WFCCIMService sharedWFCIMService] getUserInfo:self.currentSession.host refresh:NO];
+        
+        __weak typeof(self)ws = self;
+        UIAlertController *alertController = [UIAlertController alertControllerWithTitle:nil message:[NSString stringWithFormat:@"会议未开始或者已经结束，请联系 %@ 启动会议", userInfo.friendAlias.length ? userInfo.friendAlias : userInfo.displayName] preferredStyle:UIAlertControllerStyleAlert];
+
+        UIAlertAction *action1 = [UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleCancel handler:^(UIAlertAction *action) {
+            [[WFAVEngineKit sharedEngineKit] dismissViewController:ws];
+        }];
+        [alertController addAction:action1];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [ws presentViewController:alertController animated:YES completion:nil];
+        });
     }
 }
 - (void)reloadVideoUI {
@@ -1120,7 +1190,8 @@
                         break;
                     }
                 }
-                
+                WFCCUserInfo *focusUser = [[WFCCIMService sharedWFCIMService] getUserInfo:userId refresh:NO];
+                [self.bigVideoPortraitView sd_setImageWithURL:[NSURL URLWithString:focusUser.portrait] placeholderImage: [UIImage imageNamed:@"PersonalChat"]];
             }
             [self.smallCollectionView reloadData];
         } else {
@@ -1247,4 +1318,28 @@
 }
 
 #endif
+#pragma mark - WFCUConferenceManagerDelegate
+-(void)onChangeModeRequest:(BOOL)isAudience {
+    if(isAudience) {
+        [[WFAVEngineKit sharedEngineKit].currentSession switchAudience:isAudience];
+    } else {
+        UIAlertController *alertController = [UIAlertController alertControllerWithTitle:@"" message:@"主持人邀请您参与互动" preferredStyle:UIAlertControllerStyleAlert];
+        
+        UIAlertAction *action1 = [UIAlertAction actionWithTitle:@"忽略" style:UIAlertActionStyleCancel handler:^(UIAlertAction *action) {
+            
+        }];
+        [alertController addAction:action1];
+        
+        UIAlertAction *action2 = [UIAlertAction actionWithTitle:@"接受" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
+            [[WFAVEngineKit sharedEngineKit].currentSession switchAudience:isAudience];
+        }];
+        [alertController addAction:action2];
+        
+        [self presentViewController:alertController animated:YES completion:nil];
+    }
+}
+
+- (void)onKickoffRequest {
+    [[WFAVEngineKit sharedEngineKit].currentSession endCall];
+}
 @end

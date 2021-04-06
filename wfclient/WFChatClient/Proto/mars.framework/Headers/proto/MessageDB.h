@@ -27,10 +27,11 @@ namespace mars {
             
         public:
             static MessageDB* Instance();
-            long InsertMessage(TMessage &msg, bool updateConversationTime = true, std::list<UpdateConversationData*> *delayUpdateDatas = NULL);
+            long InsertMessage(TMessage &msg, bool updateConversationTime = true, std::list<UpdateConversationData*> *delayUpdateDatas = NULL, int remote_flag = 0);
             
             void RegisterMessageFlag(int type, int flag);
             bool UpdateMessageContent(long messageId, TMessageContent &msgConstnet);
+            bool UpdateMessageContentAndTime(long messageId, TMessageContent &msgConstnet, int64_t timestamp);
             bool DeleteMessage(long messageId);
             
             bool UpdateMessageContentByUid(int64_t messageUid, TMessageContent &msgConstnet);
@@ -48,7 +49,7 @@ namespace mars {
             bool updateConversationTimestamp(int conversationType, const std::string &target, int line, int64_t timestamp);
             bool updateConversationIsTop(int conversationType, const std::string &target, int line, bool istop);
             bool updateConversationIsSilent(int conversationType, const std::string &target, int line, bool issilent, bool createIfNotExist = true);
-            bool updateConversationDraft(int conversationType, const std::string &target, int line, const std::string &draft);
+            bool updateConversationDraft(int conversationType, const std::string &target, int line, const std::string &draft, bool syncRemote = true);
             
             TConversation GetConversation(int conversationType, const std::string &target, int line);
             std::list<TConversation> GetConversationList(const std::list<int> &conversationTypes, const std::list<int> &lines);
@@ -58,6 +59,7 @@ namespace mars {
             bool ClearMessages(int conversationType, const std::string &target, int line);
             bool ClearMessages(int conversationType, const std::string &target, int line, int64_t before);
             
+            long GetConversationFirstUnreadMessageId(int conversationType, const std::string &target, int line);
             std::list<TMessage> GetMessages(int conversationType, const std::string &target, int line, const std::list<int> &contentTypes, bool desc, int count, int64_t startPoint, const std::string &withUser);
             
             std::list<TMessage> GetMessagesByMessageStatus(int conversationType, const std::string &target, int line, const std::list<int> &messageStatus, bool desc, int count, int64_t startPoint, const std::string &withUser);
@@ -65,6 +67,8 @@ namespace mars {
             std::list<TMessage> GetMessages(const std::list<int> &conversationTypes, const std::list<int> &lines, const std::list<int> &contentTypes, bool desc, int count, int64_t startPoint, const std::string &withUser);
             
             std::list<TMessage> GetMessagesByMessageStatus(const std::list<int> &conversationTypes, const std::list<int> &lines, const std::list<int> &messageStatus, bool desc, int count, int64_t startPoint, const std::string &withUser);
+            
+            std::list<TMessage> GetMessagesByTimes(int conversationType, const std::string &target, int line, const std::list<int> &contentTypes, bool desc, int count, int64_t startTimestamp, const std::string &withUser);
             
             std::list<TMessage> GetUserMessages(const std::string &user, int conversationType, const std::string &target, int line, const std::list<int> &contentTypes, bool desc, int count, int64_t startPoint);
             std::list<TMessage> GetUserMessages(const std::string &user, const std::list<int> &conversationTypes, const std::list<int> &lines, const std::list<int> &contentTypes, bool desc, int count, int64_t startPoint);
@@ -88,12 +92,14 @@ namespace mars {
             std::list<std::string> GetUnreadMsgSender(int conversationType, const std::string &target, int line);
             bool ClearUnreadStatus(int conversationType, const std::string &target, int line);
             bool ClearUnreadStatus(const std::list<int> &conversationTypes, const std::list<int> lines);
+            bool ClearUnreadStatus(int messageId);
             bool ClearAllUnreadStatus();
             
             bool FailSendingMessages();
             
             int64_t getConversationReadMaxDt(int conversationType, const std::string &target, int line);
             bool updateConversationRead(int conversationType, const std::string &target, int line, int64_t dt);
+            bool updateLineRead(int conversationType, int line, int64_t dt);
             bool updateConversationReaded(int conversationType, const std::string &target, int line, int64_t dt);
             std::list<TMessage> SearchMessages(int conversationType, const std::string &target, int line, const std::string &keyword, int limit);
             std::list<TMessage> SearchMessages(int conversationType, const std::string &target, int line, const std::string &keyword, bool desc, int limit, int offset);
@@ -151,7 +157,7 @@ namespace mars {
             bool DeleteFriend(const std::string &friendUid);
             
             int unreadFriendRequest();
-            void clearUnreadFriendRequestStatus();
+            bool clearUnreadFriendRequestStatus();
             int getMessageFlag(int type);
             int64_t getUnreadFriendRequestMaxDt();
             bool updateFriendRequestStatus(const std::string &friendUid, int status);
@@ -179,7 +185,8 @@ namespace mars {
             bool GetConversationSilent(int conversationType, const std::string &target, int line);
             bool clearConversationUnread(int conversationType, const std::string &target, int line, bool clearLastMessageId = false);
             bool updateConversationUnread(int conversationType, const std::string &target, int line);
-            bool clearConversationUnread(const std::list<int> &conversationTypes, const std::list<int> lines, bool clearLastMessageId = false);
+            bool clearConversationUnread(const std::list<int> &conversationTypes, const std::list<int> &lines, bool clearLastMessageId = false);
+            bool clearAllConversationUnread(bool clearLastMessageId = false);
             bool updateConversationLastMessage(int conversationType, const std::string &target, int line, bool forceUpdate = false);
             void getMsgFromStateMent(DB2 *db, RecyclableStatement &statementHandle, TMessage &msg);
             

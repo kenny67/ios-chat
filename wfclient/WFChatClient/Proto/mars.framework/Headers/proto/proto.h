@@ -44,6 +44,12 @@
 #define MESSAGE_CONTENT_TYPE_ALLOW_MEMBER 119
 
 
+//踢出群成员的可见通知消息
+//#define MESSAGE_CONTENT_TYPE_KICKOF_GROUP_MEMBER_VISIBLE_NOTIFICATION 120
+//退群的可见通知消息
+//#define MESSAGE_CONTENT_TYPE_QUIT_GROUP_VISIBLE_NOTIFICATION 121
+
+#define MESSAGE_CONTENT_TYPE_CHANGE_EXTRA 122
 
 
 
@@ -439,6 +445,12 @@ namespace mars{
             kUserSettingWebOnline = 12,
             kUserSettingDisableRecipt = 13,
             kUserSettingFavouriteUser = 14,
+            kUserSettingMuteWhenPCOnline = 15,
+            kUserSettingLinesReaded = 16,
+            kUserSettingNoDisturbing = 17,
+            kUserSettingConversationClearMessage = 18,
+            kUserSettingConversationDraft = 19,
+            kUserSettingEnableSyncDraft = 20,
 
             kUserSettingCustomBegin = 1000
         };
@@ -505,6 +517,59 @@ namespace mars{
 #endif //WFCHAT_PROTO_SERIALIZABLE
         };
         
+    class TMomentsMedia {
+    public:
+        TMomentsMedia():width(0), height(0) {}
+        virtual ~TMomentsMedia() {}
+        std::string mediaUrl;
+        std::string thumbUrl;
+        int width;
+        int height;
+    };
+    
+    class TMomentsComment {
+    public:
+        TMomentsComment():feedId(0), commentId(0), replyId(0), type(0), serverTime(0) {}
+        virtual ~TMomentsComment() {}
+        int64_t feedId;
+        int64_t commentId;
+        int64_t replyId;
+        std::string sender;
+        int type;
+        std::string text;
+        std::string replyTo;
+        int64_t serverTime;
+        std::string extra;
+    };
+    
+    class TMomentsFeed {
+    public:
+        TMomentsFeed():feedId(0), type(0), serverTime(0), hasMore(0) {}
+        virtual ~TMomentsFeed() {}
+        int64_t feedId;
+        std::string sender;
+        int type;
+        std::string text;
+        std::list<TMomentsMedia> medias;
+        std::list<std::string> mentionedUsers;
+        std::list<std::string> toUsers;
+        std::list<std::string> excludeUsers;
+        int64_t serverTime;
+        std::string extra;
+        std::list<TMomentsComment> comments;
+        int hasMore;
+    };
+    
+    class TUploadMediaUrlEntry {
+    public:
+        TUploadMediaUrlEntry():type(0) {}
+        virtual ~TUploadMediaUrlEntry() {}
+        std::string uploadUrl;
+        std::string backupUploadUrl;
+        std::string mediaUrl;
+        int type;
+    };
+    
         class GeneralStringCallback {
         public:
             virtual void onSuccess(std::string key) = 0;
@@ -519,6 +584,13 @@ namespace mars{
             virtual void onProgress(int current, int total) = 0;
             virtual ~UploadMediaCallback() {}
         };
+    
+    class GetUploadMediaUrlCallback {
+    public:
+        virtual void onSuccess(const TUploadMediaUrlEntry &urlEntry) = 0;
+        virtual void onFalure(int errorCode) = 0;
+        virtual ~GetUploadMediaUrlCallback() {}
+    };
 
         class SendMsgCallback {
         public:
@@ -537,6 +609,13 @@ namespace mars{
             virtual void onProgress(int current, int total) = 0;
             virtual ~UpdateMediaCallback() {}
         };
+    
+    class GetAuthorizedMediaUrlCallback {
+    public:
+        virtual void onSuccess(const std::string &remoteUrl, const std::string &backupRemoteUrl) = 0;
+        virtual void onFalure(int errorCode) = 0;
+        virtual ~GetAuthorizedMediaUrlCallback() {}
+    };
 
 
         class SearchUserCallback {
@@ -701,6 +780,8 @@ namespace mars{
         extern bool setAuthInfo(const std::string &userId, const std::string &token);
         extern void Disconnect(uint8_t flag);
         extern bool Connect(const std::string& host);
+        extern void setBackupAddressStrategy(int strategy);
+        extern void setBackupAddress(const std::string &host, int port);
         extern void AppWillTerminate();
         extern void setConnectionStatusCallback(ConnectionStatusCallback *callback);
         extern void setReceiveMessageCallback(ReceiveMessageCallback *callback);
@@ -733,14 +814,19 @@ namespace mars{
         extern void loadRemoteConversationMessages(const TConversation &conv, long long beforeUid, int count, LoadRemoteMessagesCallback *callback);
 
         extern void loadRemoteLineMessages(int type, long long beforeUid, int count, LoadRemoteMessagesCallback *callback);
+    
+        extern void clearRemoteConversationMessages(int conversationType, const std::string &target, int line, GeneralOperationCallback *callback);
 
-        extern void loadConversationFileRecords(const TConversation &conv, long long beforeUid, int count, LoadFileRecordCallback *callback);
+        extern void loadConversationFileRecords(const TConversation &conv, const std::string &fromUser, long long beforeUid, int count, LoadFileRecordCallback *callback);
         extern void loadMyFileRecords(long long beforeUid, int count, LoadFileRecordCallback *callback);
         extern void deleteFileRecords(long long messageUid, GeneralOperationCallback *callback);
+        extern void searchConversationFileRecords(const std::string &keyword, const TConversation &conv, const std::string &fromUser, long long beforeUid, int count, LoadFileRecordCallback *callback);
+        extern void searchMyFileRecords(const std::string &keyword, long long beforeUid, int count, LoadFileRecordCallback *callback);
     
         extern int uploadGeneralMedia(const std::string fileName, const std::string &mediaData, int mediaType, UpdateMediaCallback *callback);
 
-        extern void getAuthorizedMediaUrl(long long messageUid, int mediaType, const std::string &mediaUrl, GeneralStringCallback *callback);
+        extern void getAuthorizedMediaUrl(long long messageUid, int mediaType, const std::string &mediaUrl, GetAuthorizedMediaUrlCallback *callback);
+        extern void getUploadMediaUrl(const std::string fileName, int mediaType, GetUploadMediaUrlCallback *callback);
 
         extern int modifyMyInfo(const std::list<std::pair<int, std::string>> &infos, GeneralOperationCallback *callback);
 
@@ -772,6 +858,8 @@ namespace mars{
         extern void (*modifyGroupInfo)(const std::string &groupId, int type, const std::string &newValue, const std::list<int> &notifyLines, TMessageContent &content, GeneralOperationCallback *callback);
 
         extern void (*modifyGroupAlias)(const std::string &groupId, const std::string &newAlias, const std::list<int> &notifyLines, TMessageContent &content, GeneralOperationCallback *callback);
+    
+        extern void modifyGroupMemberAlias(const std::string &groupId, const std::string &memberId, const std::string &newAlias, const std::list<int> &notifyLines, TMessageContent &content, GeneralOperationCallback *callback);
 
         extern void (*getGroupMembers)(const std::string &groupId, int64_t updateDt);
 
@@ -820,8 +908,10 @@ namespace mars{
 
         extern bool IsCommercialServer();
         extern bool IsReceiptEnabled();
+        extern bool HasMediaPresignedUrl();
+        extern bool HasMediaBackupUrl();
     
-    extern void sendConferenceRequest(int64_t sessionId, const std::string &roomId, const std::string &request, const std::string &data, GeneralStringCallback *callback);
+        extern void sendConferenceRequest(int64_t sessionId, const std::string &roomId, const std::string &request, const std::string &data, GeneralStringCallback *callback);
     
         extern bool filesystem_exists(const std::string &path);
 		extern bool filesystem_create_directories(const std::string &path);
@@ -829,6 +919,9 @@ namespace mars{
 		extern bool filesystem_copy_files(const std::string &source, const std::string &dest);
         extern bool filesystem_remove(const std::string &path);
 		extern void filesystem_copy_directory(const std::string &strSourceDir, const std::string &strDestDir);
+        extern bool GetFeeds(std::string data, std::list<TMomentsFeed> &feeds, bool gzip);
+        extern bool GetFeed(std::string data, TMomentsFeed &feed, bool gzip);
+        extern bool GetComments(std::string data, std::list<TMomentsComment> &feeds, bool gzip);
 		
     }
 }

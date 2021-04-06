@@ -11,6 +11,8 @@
 #import <WFChatClient/WFCChatClient.h>
 #import <SDWebImage/SDWebImage.h>
 #import "ZCCCircleProgressView.h"
+#import "WFCUConfigManager.h"
+
 
 #define Portrait_Size 40
 #define SelectView_Size 20
@@ -28,6 +30,9 @@
 
 #define Bubble_Padding_Arraw 16
 #define Bubble_Padding_Another_Side 8
+
+#define MESSAGE_BASE_CELL_QUOTE_SIZE 14
+
 
 @interface WFCUMessageCell ()
 @property (nonatomic, strong)UIActivityIndicatorView *activityIndicatorView;
@@ -49,7 +54,7 @@
 }
 
 + (CGSize)sizeForCell:(WFCUMessageModel *)msgModel withViewWidth:(CGFloat)width {
-  CGFloat height = [super hightForTimeLabel:msgModel];
+  CGFloat height = [super hightForHeaderArea:msgModel];
   CGFloat portraitSize = Portrait_Size;
   CGFloat nameLabelHeight = Name_Label_Height + Name_Client_Padding;
   CGFloat clientAreaWidth = [self clientAreaWidth];
@@ -69,11 +74,29 @@
     height += nameAndClientHeight;
   }
   height += Client_Arad_Buttom_Padding;   //buttom padding
+    
+  height += [self sizeForQuoteArea:msgModel withViewWidth:clientAreaWidth].height;
+    
   return CGSizeMake(width, height);
 }
 
 + (CGSize)sizeForClientArea:(WFCUMessageModel *)msgModel withViewWidth:(CGFloat)width {
   return CGSizeZero;
+}
+
++ (CGSize)sizeForQuoteArea:(WFCUMessageModel *)msgModel withViewWidth:(CGFloat)width {
+    if ([msgModel.message.content isKindOfClass:[WFCCTextMessageContent class]]) {
+        WFCCTextMessageContent *txtContent = (WFCCTextMessageContent *)msgModel.message.content;
+        if (txtContent.quoteInfo) {
+            CGFloat quoteWidth = width - Portrait_Size - Portrait_Padding_Right - Portrait_Size - Portrait_Padding_Left - 8;
+            NSString *quoteTxt = [NSString stringWithFormat:@"%@:%@", txtContent.quoteInfo.userDisplayName, txtContent.quoteInfo.messageDigest];
+            CGSize size = [WFCUUtilities getTextDrawingSize:quoteTxt font:[UIFont systemFontOfSize:MESSAGE_BASE_CELL_QUOTE_SIZE] constrainedSize:CGSizeMake(quoteWidth, 44)];
+            size.height += 12;
+            size.width = width;
+            return size;
+        }
+    }
+    return CGSizeZero;
 }
 
 - (void)updateStatus {
@@ -158,11 +181,9 @@
   
   [super setModel:model];
 
-    
+  CGFloat selectViewOffset = model.selecting ? SelectView_Size + Portrait_Padding_Right : 0;
   if (model.message.direction == MessageDirection_Send) {
-      CGFloat selectViewOffset = model.selecting ? SelectView_Size + Portrait_Padding_Right : 0;
-      
-    CGFloat top = [WFCUMessageCellBase hightForTimeLabel:model];
+    CGFloat top = [WFCUMessageCellBase hightForHeaderArea:model];
     CGRect frame = self.frame;
     self.portraitView.frame = CGRectMake(frame.size.width - Portrait_Size - Portrait_Padding_Right - selectViewOffset, top, Portrait_Size, Portrait_Size);
     if (model.showNameLabel) {
@@ -183,7 +204,7 @@
       self.bubbleView.image = [self.bubbleView.image
                                          resizableImageWithCapInsets:UIEdgeInsetsMake(image.size.height * 0.95, image.size.width * 0.2,image.size.height * 0.1, image.size.width * 0.05)];
       
-      if([model.message.content.class getContentFlags] == WFCCPersistFlag_PERSIST_AND_COUNT && (model.message.status == Message_Status_Sent || model.message.status == Message_Status_Readed) && [[WFCCIMService sharedWFCIMService] isReceiptEnabled] && [[WFCCIMService sharedWFCIMService] isUserEnableReceipt]) {
+      if([model.message.content.class getContentFlags] == WFCCPersistFlag_PERSIST_AND_COUNT && (model.message.status == Message_Status_Sent || model.message.status == Message_Status_Readed) && [[WFCCIMService sharedWFCIMService] isReceiptEnabled] && [[WFCCIMService sharedWFCIMService] isUserEnableReceipt] && ![model.message.content isKindOfClass:[WFCCCallStartMessageContent class]]) {
           if (model.message.conversation.type == Single_Type) {
               if (model.message.serverTime <= [[model.readDict objectForKey:model.message.conversation.target] longLongValue]) {
                   [self.receiptView setProgress:1 subProgress:1];
@@ -192,7 +213,11 @@
               } else {
                   [self.receiptView setProgress:0 subProgress:0];
               }
-              self.receiptView.hidden = NO;
+              if([model.message.conversation.target isEqualToString:[WFCUConfigManager globalManager].fileTransferId]) {
+                  self.receiptView.hidden = YES;
+              } else {
+                  self.receiptView.hidden = NO;
+              }
           } else if(model.message.conversation.type == Group_Type) {
               long long messageTS = model.message.serverTime;
               
@@ -241,7 +266,7 @@
           self.receiptView.frame = CGRectMake(self.bubbleView.frame.origin.x - 16, self.frame.size.height - 24 , 14, 14);
       }
   } else {
-    CGFloat top = [WFCUMessageCellBase hightForTimeLabel:model];
+    CGFloat top = [WFCUMessageCellBase hightForHeaderArea:model];
     self.portraitView.frame = CGRectMake(Portrait_Padding_Left, top, Portrait_Size, Portrait_Size);
     if (model.showNameLabel) {
       self.nameLabel.frame = CGRectMake(Portrait_Padding_Left + Portrait_Size + Name_Label_Padding, top, 200, Name_Label_Height);
@@ -288,7 +313,7 @@
         } else {
             self.selectView.image = [UIImage imageNamed:@"multi_unselected"];
         }
-        CGFloat top = [WFCUMessageCellBase hightForTimeLabel:model];
+        CGFloat top = [WFCUMessageCellBase hightForHeaderArea:model];
         CGRect frame = self.selectView.frame;
         frame.origin.y = top;
         self.selectView.frame = frame;
@@ -326,8 +351,54 @@
         });
         model.highlighted = NO;
     }
+    
+    self.quoteContainer.hidden = YES;
+    if ([model.message.content isKindOfClass:[WFCCTextMessageContent class]]) {
+        WFCCTextMessageContent *txtContent = (WFCCTextMessageContent *)model.message.content;
+        if (txtContent.quoteInfo) {
+            if (!self.quoteLabel) {
+                self.quoteLabel = [[UILabel alloc] initWithFrame:CGRectZero];
+                self.quoteLabel.font = [UIFont systemFontOfSize:MESSAGE_BASE_CELL_QUOTE_SIZE];
+                self.quoteLabel.numberOfLines = 0;
+                self.quoteLabel.layer.cornerRadius = 3.f;
+                self.quoteLabel.layer.masksToBounds = YES;
+                self.quoteLabel.userInteractionEnabled = YES;
+                self.quoteLabel.textColor = [UIColor grayColor];
+                [self.quoteLabel addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(onQuoteLabelTaped:)]];
+                
+                self.quoteContainer = [[UIView alloc] initWithFrame:CGRectZero];
+                self.quoteContainer.backgroundColor = [UIColor colorWithRed:0.85 green:0.85 blue:0.85 alpha:1.f];
+                self.quoteContainer.layer.cornerRadius = 3.f;
+                self.quoteContainer.layer.masksToBounds = YES;
+                [self.quoteContainer addSubview:self.quoteLabel];
+                [self.contentView addSubview:self.quoteContainer];
+            }
+            CGSize size = [self.class sizeForQuoteArea:model withViewWidth:[WFCUMessageCell clientAreaWidth]];
+            
+            CGRect frame;
+            if (model.message.direction == MessageDirection_Send) {
+                frame = CGRectMake(self.frame.size.width - Portrait_Size - Portrait_Padding_Right - Name_Label_Padding - size.width - Bubble_Padding_Another_Side - selectViewOffset, self.bubbleView.frame.origin.y + self.bubbleView.frame.size.height + 4, size.width, size.height-4);
+            } else {
+                frame = CGRectMake(Portrait_Padding_Left + Portrait_Size + Name_Label_Padding + Bubble_Padding_Arraw, self.bubbleView.frame.origin.y + self.bubbleView.frame.size.height + 4, size.width, size.height-4);
+            }
+            self.quoteContainer.frame = frame;
+            frame = self.quoteContainer.bounds;
+            frame.size.height -= 8;
+            frame.size.width -= 8;
+            frame.origin.x += 4;
+            frame.origin.y += 4;
+            self.quoteLabel.frame = frame;
+            
+            self.quoteContainer.hidden = NO;
+            self.quoteLabel.text = [NSString stringWithFormat:@"%@:%@", txtContent.quoteInfo.userDisplayName, txtContent.quoteInfo.messageDigest];
+        }
+    }
 }
-
+- (void)onQuoteLabelTaped:(id)sender {
+    if ([self.delegate respondsToSelector:@selector(didTapQuoteLabel:withModel:)]) {
+        [self.delegate didTapQuoteLabel:self withModel:self.model];
+    }
+}
 - (void)onTapReceiptView:(id)sender {
     if ([self.delegate respondsToSelector:@selector(didTapReceiptView:withModel:)] && self.model.message.conversation.type == Group_Type) {
         [self.delegate didTapReceiptView:self withModel:self.model];
@@ -440,7 +511,7 @@
 
 - (UIImageView *)selectView {
     if(!_selectView) {
-        CGFloat top = [WFCUMessageCellBase hightForTimeLabel:self.model];
+        CGFloat top = [WFCUMessageCellBase hightForHeaderArea:self.model];
         CGRect frame = self.frame;
         frame = CGRectMake(frame.size.width - SelectView_Size - Portrait_Padding_Right, top, SelectView_Size, SelectView_Size);
         

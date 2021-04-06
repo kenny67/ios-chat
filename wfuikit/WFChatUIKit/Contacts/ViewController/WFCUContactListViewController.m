@@ -25,6 +25,9 @@
 #import "UIImage+ERCategory.h"
 #import "UIFont+YH.h"
 #import "UIColor+YH.h"
+#import "WFCUPinyinUtility.h"
+
+
 @interface WFCUContactListViewController () <UITableViewDataSource, UISearchControllerDelegate, UITableViewDelegate, UITableViewDataSource, UISearchResultsUpdating>
 @property (nonatomic, strong)UITableView *tableView;
 @property (nonatomic, strong)NSMutableArray<WFCCUserInfo *> *dataArray;
@@ -94,9 +97,9 @@ static NSString *wfcstar = @"☆";
             [self updateRightBarBtn];
         }
     } else {
-      self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithImage:[UIImage imageNamed:@"bar_plus"] style:UIBarButtonItemStyleDone target:self action:@selector(onRightBarBtn:)];
+      self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithImage:[UIImage imageNamed:@"nav_add_friend"] style:UIBarButtonItemStyleDone target:self action:@selector(onRightBarBtn:)];
     }
-    
+    self.view.backgroundColor = [WFCUConfigManager globalManager].backgroudColor;
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(onUserInfoUpdated:) name:kUserInfoUpdated object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(onContactsUpdated:) name:kFriendListUpdated object:nil];
 
@@ -211,6 +214,13 @@ static NSString *wfcstar = @"☆";
         userIdList = self.candidateUsers;
     } else {
         userIdList = [[WFCCIMService sharedWFCIMService] getMyFriendList:forceLoadFromRemote];
+        if ([[NSUserDefaults standardUserDefaults] boolForKey:@"wfc_uikit_had_pc_session"]) {
+            if (![userIdList containsObject:[WFCUConfigManager globalManager].fileTransferId]) {
+                NSMutableArray *ma = [userIdList mutableCopy];
+                [ma addObject:[WFCUConfigManager globalManager].fileTransferId];
+                userIdList = [ma copy];
+            }
+        }
     }
     self.dataArray = [[[WFCCIMService sharedWFCIMService] getUserInfos:userIdList inGroup:nil] mutableCopy];
     self.needSort = YES;
@@ -327,13 +337,41 @@ static NSString *wfcstar = @"☆";
     }
 }
 
+#define REUSEIDENTIFY @"resueCell"
+- (WFCUContactTableViewCell *)dequeueOrAllocContactCell:(UITableView *)tableView {
+    WFCUContactTableViewCell *contactCell = [tableView dequeueReusableCellWithIdentifier:REUSEIDENTIFY];
+    if (contactCell == nil) {
+        contactCell = [[WFCUContactTableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:REUSEIDENTIFY];
+        contactCell.separatorInset = UIEdgeInsetsMake(0, 68, 0, 0);
+    }
+    return contactCell;
+}
+#define NEWFRIEND_REUSEIDENTIFY @"newFriendCell"
+- (WFCUNewFriendTableViewCell *)dequeueOrAllocNewFriendCell:(UITableView *)tableView {
+    WFCUNewFriendTableViewCell *contactCell = [tableView dequeueReusableCellWithIdentifier:NEWFRIEND_REUSEIDENTIFY];
+    if (contactCell == nil) {
+        contactCell = [[WFCUNewFriendTableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:NEWFRIEND_REUSEIDENTIFY];
+        contactCell.separatorInset = UIEdgeInsetsMake(0, 68, 0, 0);
+    }
+    return contactCell;
+}
+#define SELECT_REUSEIDENTIFY @"resueSelectCell"
+- (WFCUContactSelectTableViewCell *)dequeueOrAllocSelectContactCell:(UITableView *)tableView {
+    WFCUContactSelectTableViewCell *selectCell = [tableView dequeueReusableCellWithIdentifier:SELECT_REUSEIDENTIFY];
+    if (selectCell == nil) {
+        selectCell = [[WFCUContactSelectTableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:SELECT_REUSEIDENTIFY];
+        selectCell.selectionStyle = UITableViewCellSelectionStyleNone;
+        selectCell.separatorInset = UIEdgeInsetsMake(0, 102, 0, 0);
+    }
+    return selectCell;
+}
+
 // Row display. Implementers should *always* try to reuse cells by setting each cell's reuseIdentifier and querying for available reusable cells with dequeueReusableCellWithIdentifier:
 // Cell gets various attributes set automatically based on table (separators) and data source (accessory views, editing controls)
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     UITableViewCell *cell = nil;
     
-#define REUSEIDENTIFY @"resueCell"
     NSArray *dataSource;
     if (self.searchController.active || self.selectContact) {
         if ((self.showCreateChannel || self.showMentionAll) && !self.searchController.active) {
@@ -344,21 +382,17 @@ static NSString *wfcstar = @"☆";
                 } else {
                     cell.textLabel.text = WFCString(@"MentionAll");
                 }
-                
+                cell.separatorInset = UIEdgeInsetsMake(0, 68, 0, 0);
                 return cell;
             }
             dataSource = self.allFriendSectionDic[self.allKeys[indexPath.section-1]];
         } else {
             dataSource = self.allFriendSectionDic[self.allKeys[indexPath.section]];
         }
-        
     } else {
         if (indexPath.section == 0) {
             if (indexPath.row == 0) {
-                WFCUNewFriendTableViewCell *contactCell = [tableView dequeueReusableCellWithIdentifier:@"newFriendCell"];
-                if (contactCell == nil) {
-                    contactCell = [[WFCUNewFriendTableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"newFriendCell"];
-                }
+                WFCUNewFriendTableViewCell *contactCell = [self dequeueOrAllocNewFriendCell:tableView];
                 
                 contactCell.nameLabel.text = WFCString(@"NewFriend");
                 contactCell.portraitView.image = [UIImage imageNamed:@"friend_request_icon"];
@@ -368,20 +402,14 @@ static NSString *wfcstar = @"☆";
                 contactCell.nameLabel.textColor = [WFCUConfigManager globalManager].textColor;
                 return contactCell;
             } else if(indexPath.row == 1) {
-                WFCUContactTableViewCell *contactCell = [tableView dequeueReusableCellWithIdentifier:REUSEIDENTIFY];
-                if (contactCell == nil) {
-                    contactCell = [[WFCUContactTableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:REUSEIDENTIFY];
-                }
+                WFCUContactTableViewCell *contactCell = [self dequeueOrAllocContactCell:tableView];
                 contactCell.separatorInset = UIEdgeInsetsMake(0, 60, 0, 0);
                 contactCell.nameLabel.text = WFCString(@"Group");
                 contactCell.portraitView.image = [UIImage imageNamed:@"contact_group_icon"];
                 contactCell.nameLabel.textColor = [WFCUConfigManager globalManager].textColor;
                 return contactCell;
             } else {
-                WFCUContactTableViewCell *contactCell = [tableView dequeueReusableCellWithIdentifier:REUSEIDENTIFY];
-                if (contactCell == nil) {
-                    contactCell = [[WFCUContactTableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:REUSEIDENTIFY];
-                }
+                WFCUContactTableViewCell *contactCell = [self dequeueOrAllocContactCell:tableView];
                 
                 contactCell.nameLabel.text = WFCString(@"Channel");
                 contactCell.portraitView.image = [UIImage imageNamed:@"contact_channel_icon"];
@@ -395,13 +423,8 @@ static NSString *wfcstar = @"☆";
 
     
     if (self.selectContact) {
-#define SELECT_REUSEIDENTIFY @"resueSelectCell"
         if (self.multiSelect && !self.withoutCheckBox) {
-            WFCUContactSelectTableViewCell *selectCell = [tableView dequeueReusableCellWithIdentifier:SELECT_REUSEIDENTIFY];
-            if (selectCell == nil) {
-                selectCell = [[WFCUContactSelectTableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:SELECT_REUSEIDENTIFY];
-                selectCell.selectionStyle = UITableViewCellSelectionStyleNone;
-            }
+            WFCUContactSelectTableViewCell *selectCell = [self dequeueOrAllocSelectContactCell:tableView];
             WFCCUserInfo *userInfo = dataSource[indexPath.row];
             selectCell.friendUid = userInfo.userId;
             selectCell.multiSelect = self.multiSelect;
@@ -425,10 +448,7 @@ static NSString *wfcstar = @"☆";
             selectCell.nameLabel.textColor = [WFCUConfigManager globalManager].textColor;
             cell = selectCell;
         } else {
-            WFCUContactTableViewCell *selectCell = [tableView dequeueReusableCellWithIdentifier:REUSEIDENTIFY];
-            if (selectCell == nil) {
-                selectCell = [[WFCUContactTableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:REUSEIDENTIFY];
-            }
+            WFCUContactTableViewCell *selectCell = [self dequeueOrAllocContactCell:tableView];
             
             WFCCUserInfo *userInfo = dataSource[indexPath.row];
             selectCell.userId = userInfo.userId;
@@ -437,39 +457,24 @@ static NSString *wfcstar = @"☆";
             cell = selectCell;
         }
     } else {
-#define REUSEIDENTIFY @"resueCell"
-        
         if (indexPath.section == 0 && !self.searchController.active) {
             if (indexPath.row == 0) {
-                WFCUNewFriendTableViewCell *contactCell = [tableView dequeueReusableCellWithIdentifier:@"newFriendCell"];
-                if (contactCell == nil) {
-                    contactCell = [[WFCUNewFriendTableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"newFriendCell"];
-                }
-                [contactCell refresh];
-                contactCell.separatorInset = UIEdgeInsetsMake(0, 60, 0, 0);
+              WFCUNewFriendTableViewCell *contactCell = [self dequeueOrAllocNewFriendCell:tableView];
+              [contactCell refresh];
 
               contactCell.nameLabel.text = WFCString(@"NewFriend");
               contactCell.portraitView.image = [UIImage imageNamed:@"friend_request_icon"];
               contactCell.nameLabel.textColor = [WFCUConfigManager globalManager].textColor;
               cell = contactCell;
             } else {
-                WFCUContactTableViewCell *contactCell = [tableView dequeueReusableCellWithIdentifier:REUSEIDENTIFY];
-                if (contactCell == nil) {
-                    contactCell = [[WFCUContactTableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:REUSEIDENTIFY];
-                }
-                contactCell.separatorInset = UIEdgeInsetsMake(0, 60, 0, 0);
-
+              WFCUContactTableViewCell *contactCell = [self dequeueOrAllocContactCell:tableView];
               contactCell.nameLabel.text = WFCString(@"Group");
               contactCell.portraitView.image = [UIImage imageNamed:@"contact_group_icon"];
               contactCell.nameLabel.textColor = [WFCUConfigManager globalManager].textColor;
               cell = contactCell;
             }
         } else {
-            WFCUContactTableViewCell *contactCell = [tableView dequeueReusableCellWithIdentifier:REUSEIDENTIFY];
-            if (contactCell == nil) {
-                contactCell = [[WFCUContactTableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:REUSEIDENTIFY];
-            }
-            
+            WFCUContactTableViewCell *contactCell = [self dequeueOrAllocContactCell:tableView];
             WFCCUserInfo *userInfo = dataSource[indexPath.row];
             contactCell.userId = userInfo.userId;
             contactCell.nameLabel.textColor = [WFCUConfigManager globalManager].textColor;
@@ -479,7 +484,7 @@ static NSString *wfcstar = @"☆";
     if (cell == nil) {
         NSLog(@"error");
     }
-    cell.separatorInset = UIEdgeInsetsMake(0, 60, 0, 0);
+    
     return cell;
 }
 
@@ -518,8 +523,15 @@ static NSString *wfcstar = @"☆";
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForHeaderInSection:(NSInteger)section {
-    if (section == 0) {
-        return 0;
+    if (self.selectContact || self.searchController.active) {
+        if ((self.showCreateChannel || self.showMentionAll) && !self.searchController.active) {
+            if (section == 0) {
+                return 0;
+            }
+        }
+    } else {
+        if(section == 0)
+            return 0;
     }
     return 30;
 }
@@ -559,7 +571,7 @@ static NSString *wfcstar = @"☆";
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
-    return 51;
+    return 52;
 }
 
 - (UIActivityIndicatorView *)activityIndicator {
@@ -694,9 +706,17 @@ static NSString *wfcstar = @"☆";
         NSString *searchString = [self.searchController.searchBar text];
         if (self.searchList!= nil) {
             [self.searchList removeAllObjects];
-            for (WFCCUserInfo *friend in self.dataArray) {
-                if ([friend.displayName.lowercaseString containsString:searchString.lowercaseString] || [friend.friendAlias.lowercaseString containsString:searchString.lowercaseString]) {
-                    [self.searchList addObject:friend];
+            if(searchString.length) {
+                WFCUPinyinUtility *pu = [[WFCUPinyinUtility alloc] init];
+                BOOL isChinese = [pu isChinese:searchString];
+                for (WFCCUserInfo *friend in self.dataArray) {
+                    if ([friend.displayName.lowercaseString containsString:searchString.lowercaseString] || [friend.friendAlias.lowercaseString containsString:searchString.lowercaseString]) {
+                        [self.searchList addObject:friend];
+                    } else if(!isChinese) {
+                        if([pu isMatch:friend.displayName ofPinYin:searchString] || [pu isMatch:friend.friendAlias ofPinYin:searchString]) {
+                            [self.searchList addObject:friend];
+                        }
+                    }
                 }
             }
         }

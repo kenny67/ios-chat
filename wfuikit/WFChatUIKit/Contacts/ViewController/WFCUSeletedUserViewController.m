@@ -3,7 +3,7 @@
 //  WFChatUIKit
 //
 //  Created by Zack Zhang on 2020/4/2.
-//  Copyright © 2020 Tom Lee. All rights reserved.
+//  Copyright © 2020 WildFireChat. All rights reserved.
 //
 
 #import "WFCUSeletedUserViewController.h"
@@ -38,7 +38,7 @@ UISearchBarDelegate>
 @end
 
 @implementation WFCUSeletedUserViewController
-#pragma mark - Life Circle
+
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.selectedUsers = [[NSMutableArray alloc] init];
@@ -71,7 +71,7 @@ UISearchBarDelegate>
     [super viewWillDisappear:animated];
     
 }
-#pragma mark - kvo
+
 - (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary<NSKeyValueChangeKey,id> *)change context:(void *)context {
     if ([keyPath isEqualToString:@"contentSize"]) {
         [self resizeAllView];
@@ -110,11 +110,10 @@ UISearchBarDelegate>
     } else {
         return self.dataSource.count;
     }
-    
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    WFCUSelectedUserTableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"selectedUserT"];
+    WFCUSelectedUserTableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"cell"];
     
     if (self.type == Horizontal) {
         NSString *key = self.sectionKeys[indexPath.section];
@@ -171,9 +170,6 @@ UISearchBarDelegate>
 
 - (CGFloat)tableView:(UITableView *)tableView heightForHeaderInSection:(NSInteger)section {
     if (self.type == Horizontal) {
-        if (section == 0) {
-            return 0;
-        }
         return 30;
         
     } else {
@@ -241,9 +237,7 @@ UISearchBarDelegate>
         self.searchBar.frame = CGRectMake(16 + collectionViewWidth + 8, 0, self.view.frame.size.width - (16 + collectionViewWidth + 8 * 2), 52);
         self.topView.frame = CGRectMake(0, topSpace, self.view.frame.size.width, 60);
         self.tableView.frame = CGRectMake(0, topSpace + 60, self.view.frame.size.width, self.view.frame.size.height - (60 + topSpace + 2));
-        
     }
-    
 }
 
 - (void)loadData {
@@ -273,7 +267,6 @@ UISearchBarDelegate>
 }
 
 - (void)setUpUI {
-    
     if (self.type != No) {
         [self.view addSubview:self.topView];
         [self.topView addSubview:self.searchBar];
@@ -363,21 +356,18 @@ UISearchBarDelegate>
         self.doneButton.alpha = 0.6;
         self.doneButton.frame = CGRectMake(0, 0, 52, 30);
         [self.doneButton setTitle:@"完成" forState:UIControlStateNormal];
-
     }
 }
 
 - (void)cancel {
     [_selectedUserCollectionView removeObserver:self forKeyPath:@"contentSize"];
-    
     [[WFCUConfigManager globalManager] setupNavBar];
-    
     [self.navigationController dismissViewControllerAnimated:YES completion:nil];
 }
 
 - (void)finish {
     [_selectedUserCollectionView removeObserver:self forKeyPath:@"contentSize"];
-    
+
     [[WFCUConfigManager globalManager] setupNavBar];
     NSMutableArray *selectedUserIds = [NSMutableArray new];
     for (WFCUSelectedUserInfo *user in self.selectedUsers) {
@@ -390,7 +380,6 @@ UISearchBarDelegate>
 }
 
 - (void)sortAndRefreshWithList:(NSArray *)friendList {
-    //    self.sorting = YES;
     dispatch_async(dispatch_get_global_queue(0, 0), ^{
         NSMutableDictionary *resultDic = [WFCUUserSectionKeySupport userSectionKeys:friendList];
         dispatch_async(dispatch_get_main_queue(), ^{
@@ -430,35 +419,34 @@ UISearchBarDelegate>
         });
     }
     [self setDoneButtonStyleAndContent:self.selectedUsers.count > 0];
-    NSIndexPath *indexPath = nil;
+
     if (self.type == Vertical) {
-       indexPath = [NSIndexPath indexPathForRow:[self.dataSource indexOfObject:user] inSection:0];
+        NSIndexPath *indexPath = [NSIndexPath indexPathForRow:[self.dataSource indexOfObject:user] inSection:0];
+        [self.tableView reloadRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationNone];
     } else {
-        indexPath = [self getSectionIndexPath:user];
+        [self reloadCellForUser:user];
     }
     
-    [self.tableView reloadRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationNone];
+    
     return YES;
     
 }
 
-- (NSIndexPath *)getSectionIndexPath:(WFCUSelectedUserInfo *)user {
-    NSIndexPath *indexPath = nil;
-    
+- (void)reloadCellForUser:(WFCUSelectedUserInfo *)user {
     for (NSString *key in self.sectionKeys) {
         NSArray *users = self.sectionDictionary[key];
         for (WFCUSelectedUserInfo *u in users) {
             if ([u isEqual:user]) {
                 NSInteger section = [self.sectionKeys indexOfObject:key];
                 NSInteger row =  [users indexOfObject:u];
-                indexPath = [NSIndexPath indexPathForRow:row inSection:section];
+                NSIndexPath *indexPath = [NSIndexPath indexPathForRow:row inSection:section];
+                [self.tableView reloadRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationNone];
             }
         }
     }
-    return indexPath;
 }
 
-#pragma mark - lazy load
+#pragma mark - getter
 - (UICollectionView *)selectedUserCollectionView {
     if (!_selectedUserCollectionView) {
         UICollectionViewFlowLayout *flowLayout = [[UICollectionViewFlowLayout alloc] init];
@@ -489,11 +477,10 @@ UISearchBarDelegate>
         _tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
         _tableView.delegate = self;
         _tableView.dataSource = self;
-        //        _tableView.frame = self.view.bounds;
         _tableView.sectionIndexColor = [UIColor colorWithHexString:@"0x4e4e4e"];
         _tableView.tableFooterView = [[UIView alloc] initWithFrame:CGRectZero];
         
-        [_tableView registerClass:[WFCUSelectedUserTableViewCell class] forCellReuseIdentifier:@"selectedUserT"];
+        [_tableView registerClass:[WFCUSelectedUserTableViewCell class] forCellReuseIdentifier:@"cell"];
         
     }
     return _tableView;
@@ -521,6 +508,4 @@ UISearchBarDelegate>
     }
     return _searchBar;
 }
-
-
 @end

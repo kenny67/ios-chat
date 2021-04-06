@@ -23,7 +23,7 @@
 #import "WFCUConfigManager.h"
 #import "WFCUUserMessageListViewController.h"
 
-@interface WFCUProfileTableViewController () <UITableViewDelegate, UITableViewDataSource, UIActionSheetDelegate>
+@interface WFCUProfileTableViewController () <UITableViewDelegate, UITableViewDataSource>
 @property (strong, nonatomic)UIImageView *portraitView;
 @property (strong, nonatomic)UILabel *aliasLabel;
 @property (strong, nonatomic)UILabel *displayNameLabel;
@@ -94,37 +94,129 @@
 }
 
 - (void)onRightBtn:(id)sender {
-    NSString *title;
-    UIActionSheet *actionSheet;
+    __weak typeof(self)ws = self;
+    UIAlertController *actionSheet = [UIAlertController alertControllerWithTitle:nil message:nil preferredStyle:UIAlertControllerStyleActionSheet];
     
-    NSString *friendTitle;
-    NSString *blacklistTitle;
-    NSString *favTitle;
-    if ([[WFCCIMService sharedWFCIMService] isMyFriend:self.userId]) {
-        friendTitle = WFCString(@"DeleteFriend");
-        if ([[WFCCIMService sharedWFCIMService] isFavUser:self.userId]) {
-            favTitle = @"取消星标好友";
-        } else {
-            favTitle = @"设置星标好友";
-        }
-    } else {
-        friendTitle = WFCString(@"AddFriend");
+    
+    UIAlertAction *actionCancel = [UIAlertAction actionWithTitle:WFCString(@"Cancel") style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
         
+    }];
+    [actionSheet addAction:actionCancel];
+    
+    if ([[WFCCIMService sharedWFCIMService] isMyFriend:self.userId]) {
+        UIAlertAction *deleteFriendAction = [UIAlertAction actionWithTitle:WFCString(@"DeleteFriend") style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
+            MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:ws.view animated:YES];
+            hud.label.text = @"处理中...";
+            [hud showAnimated:YES];
+            
+            [[WFCCIMService sharedWFCIMService] deleteFriend:ws.userId success:^{
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [hud hideAnimated:YES];
+
+                    MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:ws.view animated:YES];
+                    hud.mode = MBProgressHUDModeText;
+                    hud.label.text = @"处理成功";
+                    hud.offset = CGPointMake(0.f, MBProgressMaxOffset);
+                    [hud hideAnimated:YES afterDelay:1.f];
+                });
+            } error:^(int error_code) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [hud hideAnimated:YES];
+
+                    MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:ws.view animated:YES];
+                    hud.mode = MBProgressHUDModeText;
+                    hud.label.text = @"处理失败";
+                    hud.offset = CGPointMake(0.f, MBProgressMaxOffset);
+                    [hud hideAnimated:YES afterDelay:1.f];
+                });
+            }];
+        }];
+        
+        [actionSheet addAction:deleteFriendAction];
+    } else {
+        UIAlertAction *addFriendAction = [UIAlertAction actionWithTitle:WFCString(@"AddFriend") style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+            WFCUVerifyRequestViewController *vc = [[WFCUVerifyRequestViewController alloc] init];
+            vc.userId = ws.userId;
+            [ws.navigationController pushViewController:vc animated:YES];
+        }];
+        [actionSheet addAction:addFriendAction];
     }
     
     if ([[WFCCIMService sharedWFCIMService] isBlackListed:self.userId]) {
-        blacklistTitle = WFCString(@"RemoveFromBlacklist");
+        UIAlertAction *addFriendAction = [UIAlertAction actionWithTitle:WFCString(@"RemoveFromBlacklist") style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+            MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:ws.view animated:YES];
+            hud.label.text = @"处理中...";
+            [hud showAnimated:YES];
+            
+            [[WFCCIMService sharedWFCIMService] setBlackList:ws.userId isBlackListed:NO success:^{
+                [hud hideAnimated:YES];
+
+                MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:ws.view animated:YES];
+                hud.mode = MBProgressHUDModeText;
+                hud.label.text = @"处理成功";
+                hud.offset = CGPointMake(0.f, MBProgressMaxOffset);
+                [hud hideAnimated:YES afterDelay:1.f];
+            } error:^(int error_code) {
+                [hud hideAnimated:YES];
+
+                MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:ws.view animated:YES];
+                hud.mode = MBProgressHUDModeText;
+                hud.label.text = @"处理失败";
+                hud.offset = CGPointMake(0.f, MBProgressMaxOffset);
+                [hud hideAnimated:YES afterDelay:1.f];
+            }];
+        }];
+        [actionSheet addAction:addFriendAction];
     } else {
-        blacklistTitle = WFCString(@"Add2Blacklist");
+        UIAlertAction *addFriendAction = [UIAlertAction actionWithTitle:WFCString(@"Add2Blacklist") style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+            MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:ws.view animated:YES];
+            hud.label.text = @"处理中...";
+            [hud showAnimated:YES];
+            
+            [[WFCCIMService sharedWFCIMService] setBlackList:ws.userId isBlackListed:YES success:^{
+                [hud hideAnimated:YES];
+
+                MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:ws.view animated:YES];
+                hud.mode = MBProgressHUDModeText;
+                hud.label.text = @"处理成功";
+                hud.offset = CGPointMake(0.f, MBProgressMaxOffset);
+                [hud hideAnimated:YES afterDelay:1.f];
+            } error:^(int error_code) {
+                [hud hideAnimated:YES];
+
+                MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:ws.view animated:YES];
+                hud.mode = MBProgressHUDModeText;
+                hud.label.text = @"处理失败";
+                hud.offset = CGPointMake(0.f, MBProgressMaxOffset);
+                [hud hideAnimated:YES afterDelay:1.f];
+            }];
+        }];
+        [actionSheet addAction:addFriendAction];
     }
     
-    if (favTitle) {
-        actionSheet = [[UIActionSheet alloc] initWithTitle:nil delegate:self cancelButtonTitle:WFCString(@"Cancel") destructiveButtonTitle:friendTitle otherButtonTitles:blacklistTitle, WFCString(@"SetAlias"), favTitle, nil];
-    } else {
-        actionSheet = [[UIActionSheet alloc] initWithTitle:nil delegate:self cancelButtonTitle:WFCString(@"Cancel") destructiveButtonTitle:friendTitle otherButtonTitles:blacklistTitle, WFCString(@"SetAlias"), nil];
+    
+    
+    UIAlertAction *aliasAction = [UIAlertAction actionWithTitle:WFCString(@"SetAlias") style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        [ws setFriendNote];
+    }];
+    [actionSheet addAction:aliasAction];
+    
+    if ([[WFCCIMService sharedWFCIMService] isMyFriend:self.userId]) {
+        if ([[WFCCIMService sharedWFCIMService] isFavUser:self.userId]) {
+            UIAlertAction *cancelStarAction = [UIAlertAction actionWithTitle:@"取消星标好友" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+                [ws setFavUser];
+            }];
+            [actionSheet addAction:cancelStarAction];
+        } else {
+            UIAlertAction *setStarAction = [UIAlertAction actionWithTitle:@"设置星标好友" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+                [ws setFavUser];
+            }];
+            [actionSheet addAction:setStarAction];
+        }
     }
     
-    [actionSheet showInView:self.view];
+    
+    [self presentViewController:actionSheet animated:YES completion:nil];
 }
 - (void)loadData {
     self.cells = [[NSMutableArray alloc] init];
@@ -155,7 +247,7 @@
         self.displayNameLabel.text = self.userInfo.displayName;
         
         self.userNameLabel = [[UILabel alloc] initWithFrame:CGRectMake(94, 60, width - 94 - 8, 11)];
-        self.userNameLabel.text = [NSString stringWithFormat:@"野火ID:%@", self.userInfo.name];
+        self.userNameLabel.text = [NSString stringWithFormat:@"野火号:%@", self.userInfo.name];
         self.userNameLabel.font = [UIFont systemFontOfSize:12];
         self.userNameLabel.textColor = [UIColor grayColor];
     } else {
@@ -166,7 +258,7 @@
         self.displayNameLabel.font = [UIFont pingFangSCWithWeight:FontWeightStyleMedium size:20];
         
         self.userNameLabel = [[UILabel alloc] initWithFrame:CGRectMake(94, 50, width - 94 - 8, 21)];
-        self.userNameLabel.text = [NSString stringWithFormat:@"野火ID:%@", self.userInfo.name];
+        self.userNameLabel.text = [NSString stringWithFormat:@"野火号:%@", self.userInfo.name];
         self.userNameLabel.font = [UIFont systemFontOfSize:12];
         self.userNameLabel.textColor = [UIColor grayColor];
     }
@@ -186,79 +278,8 @@
     [self.headerCell addSubview:self.aliasLabel];
     self.headerCells = [NSMutableArray new];
     [self.headerCells addObject:self.headerCell];
-    if ([[WFCCIMService sharedWFCIMService] isMyFriend:self.userId]) {
-        UITableViewCell *alisaCell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"setAlisa"];
-        alisaCell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
-
-        UIButton *btn = [[UIButton alloc] initWithFrame:CGRectMake(16, 0, self.view.frame.size.width - 16 - 60, 50)];
-        [btn setTitle:WFCString(@"ModifyNickname") forState:UIControlStateNormal];
-        [btn setTitleColor:[WFCUConfigManager globalManager].textColor forState:UIControlStateNormal];
-        btn.titleLabel.font = [UIFont pingFangSCWithWeight:FontWeightStyleRegular size:16];
-        [btn addTarget:self action:@selector(setFriendNote) forControlEvents:UIControlEventTouchUpInside];
-        btn.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
-        [alisaCell.contentView addSubview:btn];
-        [self showSeparatorLine:alisaCell];
-        [self.headerCells addObject:alisaCell];
-
-//        if (self.userInfo.mobile.length > 0) {
-//            self.mobileLabel = [[UILabel alloc] initWithFrame:CGRectMake(92, 50, width - 94 - 8, 21)];
-//            self.mobileLabel.font = [UIFont pingFangSCWithWeight:FontWeightStyleRegular size:14];
-//            self.mobileLabel.textColor = [UIColor colorWithHexString:@"0x828282"];
-//            self.mobileLabel.text = [NSString stringWithFormat:@"%@: %@",WFCString(@"Mobile"),self.userInfo.mobile];
-//            [self.headerCell addSubview:self.mobileLabel];
-//
-//        }
-        
-        if (self.userInfo.email.length > 0) {
-            UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:@"cell"];
-            cell.textLabel.text = self.userInfo.email;
-            [self.cells addObject:cell];
-        }
-        
-        if (self.userInfo.address.length) {
-            UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:@"cell"];
-            cell.textLabel.text = self.userInfo.address;
-            [self.cells addObject:cell];
-        }
-        
-        if (self.userInfo.company.length) {
-            UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:@"cell"];
-            cell.textLabel.text = self.userInfo.company;
-            [self.cells addObject:cell];
-        }
-        
-        if (self.userInfo.social.length) {
-            UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:@"cell"];
-            cell.textLabel.text = self.userInfo.social;
-            [self.cells addObject:cell];
-        }
-    }
     
-    if (self.fromConversation.type == Group_Type) {
-        self.userMessagesCell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:@"cell"];
-        self.userMessagesCell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
-        self.userMessagesCell.textLabel.text = @"查看他（她）的消息";
-        [self.cells addObject:self.userMessagesCell];
-    }
-    
-    if(NSClassFromString(@"SDTimeLineTableViewController")) {
-        self.momentCell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:@"momentCell"];
-        for (UIView *subView in self.momentCell.subviews) {
-               [subView removeFromSuperview];
-        }
-        
-        UIButton *momentButton = [[UIButton alloc] initWithFrame:CGRectMake(16, 0, self.view.frame.size.width - 100, 70)];
-        [momentButton setTitle: @"朋友圈" forState:UIControlStateNormal];
-        [momentButton setTitleColor:[WFCUConfigManager globalManager].textColor forState:UIControlStateNormal];
-        momentButton.titleLabel.font = [UIFont pingFangSCWithWeight:FontWeightStyleRegular size:16];
-        momentButton.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
-        [momentButton addTarget:self action:@selector(momentClick) forControlEvents:UIControlEventTouchUpInside];
-        [self.momentCell.contentView addSubview:momentButton];
-        self.momentCell.selectionStyle = UITableViewCellSelectionStyleNone;
-        self.momentCell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
-    }
-    
-    if ([[WFCCIMService sharedWFCIMService] isMyFriend:self.userId]) {
+    if (self.userInfo.type == 1) {
         self.sendMessageCell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:@"cell"];
         for (UIView *subView in self.sendMessageCell.subviews) {
             [subView removeFromSuperview];
@@ -270,38 +291,149 @@
         [btn setTitleColor:[WFCUConfigManager globalManager].textColor forState:UIControlStateNormal];
         btn.titleLabel.font = [UIFont pingFangSCWithWeight:FontWeightStyleMedium size:16];
         [btn addTarget:self action:@selector(onSendMessageBtn:) forControlEvents:UIControlEventTouchDown];
-        [self.sendMessageCell.contentView addSubview:btn];
-        [self showSeparatorLine:self.sendMessageCell];
-        
-#if WFCU_SUPPORT_VOIP
-        self.voipCallCell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:@"cell"];
-        for (UIView *subView in self.voipCallCell.subviews) {
-            [subView removeFromSuperview];
+        if (@available(iOS 14, *)) {
+            [self.sendMessageCell.contentView addSubview:btn];
+        } else {
+            [self.sendMessageCell addSubview:btn];
         }
-        btn = [[UIButton alloc] initWithFrame:CGRectMake(0, 0, width, 50)];
-        [btn setImage:[UIImage imageNamed:@"video"] forState:UIControlStateNormal];
-        btn.imageEdgeInsets = UIEdgeInsetsMake(0, 0, 0, 10);
-        [btn setTitle:WFCString(@"VOIPCall") forState:UIControlStateNormal];
-        [btn addTarget:self action:@selector(onVoipCallBtn:) forControlEvents:UIControlEventTouchDown];
-        [btn setTitleColor:[UIColor colorWithHexString:@"0x5b6e8e"] forState:UIControlStateNormal];
-        btn.titleLabel.font = [UIFont pingFangSCWithWeight:FontWeightStyleMedium size:16];
-        [self.voipCallCell.contentView addSubview:btn];
-#endif
-    } else if([[WFCCNetworkService sharedInstance].userId isEqualToString:self.userId]) {
-        
     } else {
-        self.addFriendCell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:@"cell"];
-        for (UIView *subView in self.addFriendCell.subviews) {
-            [subView removeFromSuperview];
+        if ([[WFCCIMService sharedWFCIMService] isMyFriend:self.userId]) {
+            UITableViewCell *alisaCell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"setAlisa"];
+            alisaCell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+
+            UIButton *btn = [[UIButton alloc] initWithFrame:CGRectMake(16, 0, self.view.frame.size.width - 16 - 60, 50)];
+            [btn setTitle:WFCString(@"ModifyNickname") forState:UIControlStateNormal];
+            [btn setTitleColor:[WFCUConfigManager globalManager].textColor forState:UIControlStateNormal];
+            btn.titleLabel.font = [UIFont pingFangSCWithWeight:FontWeightStyleRegular size:16];
+            [btn addTarget:self action:@selector(setFriendNote) forControlEvents:UIControlEventTouchUpInside];
+            btn.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
+            [alisaCell.contentView addSubview:btn];
+            [self showSeparatorLine:alisaCell];
+            [self.headerCells addObject:alisaCell];
+
+    //        if (self.userInfo.mobile.length > 0) {
+    //            self.mobileLabel = [[UILabel alloc] initWithFrame:CGRectMake(92, 50, width - 94 - 8, 21)];
+    //            self.mobileLabel.font = [UIFont pingFangSCWithWeight:FontWeightStyleRegular size:14];
+    //            self.mobileLabel.textColor = [UIColor colorWithHexString:@"0x828282"];
+    //            self.mobileLabel.text = [NSString stringWithFormat:@"%@: %@",WFCString(@"Mobile"),self.userInfo.mobile];
+    //            [self.headerCell addSubview:self.mobileLabel];
+    //
+    //        }
+            
+            if (self.userInfo.email.length > 0) {
+                UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:@"cell"];
+                cell.textLabel.text = self.userInfo.email;
+                [self.cells addObject:cell];
+            }
+            
+            if (self.userInfo.address.length) {
+                UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:@"cell"];
+                cell.textLabel.text = self.userInfo.address;
+                [self.cells addObject:cell];
+            }
+            
+            if (self.userInfo.company.length) {
+                UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:@"cell"];
+                cell.textLabel.text = self.userInfo.company;
+                [self.cells addObject:cell];
+            }
+            
+            if (self.userInfo.social.length) {
+                UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:@"cell"];
+                cell.textLabel.text = self.userInfo.social;
+                [self.cells addObject:cell];
+            }
         }
-        UIButton *btn = [[UIButton alloc] initWithFrame:CGRectMake(20, 8, width - 40, 40)];
-        [btn setTitle:WFCString(@"AddFriend") forState:UIControlStateNormal];
-        [btn setBackgroundColor:[UIColor greenColor]];
-        [btn addTarget:self action:@selector(onAddFriendBtn:) forControlEvents:UIControlEventTouchDown];
-        btn.layer.cornerRadius = 5.f;
-        btn.layer.masksToBounds = YES;
-        [self.addFriendCell.contentView addSubview:btn];
         
+        if (self.fromConversation.type == Group_Type) {
+            self.userMessagesCell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:@"cell"];
+            self.userMessagesCell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+            if([self.userId isEqualToString:[WFCCNetworkService sharedInstance].userId]) {
+                self.userMessagesCell.textLabel.text = @"查看我的消息";
+            } else {
+                self.userMessagesCell.textLabel.text = @"查看他（她）的消息";
+            }
+            [self.cells addObject:self.userMessagesCell];
+        }
+        
+        if(NSClassFromString(@"SDTimeLineTableViewController")) {
+            self.momentCell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:@"momentCell"];
+            for (UIView *subView in self.momentCell.subviews) {
+                   [subView removeFromSuperview];
+            }
+            
+            UIButton *momentButton = [[UIButton alloc] initWithFrame:CGRectMake(16, 0, self.view.frame.size.width - 100, 70)];
+            [momentButton setTitle: @"朋友圈" forState:UIControlStateNormal];
+            [momentButton setTitleColor:[WFCUConfigManager globalManager].textColor forState:UIControlStateNormal];
+            momentButton.titleLabel.font = [UIFont pingFangSCWithWeight:FontWeightStyleRegular size:16];
+            momentButton.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
+            [momentButton addTarget:self action:@selector(momentClick) forControlEvents:UIControlEventTouchUpInside];
+            if (@available(iOS 14, *)) {
+                [self.momentCell.contentView addSubview:momentButton];
+            } else {
+                [self.momentCell addSubview:momentButton];
+            }
+            self.momentCell.selectionStyle = UITableViewCellSelectionStyleNone;
+            self.momentCell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+        }
+        
+        if ([[WFCCIMService sharedWFCIMService] isMyFriend:self.userId]) {
+            self.sendMessageCell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:@"cell"];
+            for (UIView *subView in self.sendMessageCell.subviews) {
+                [subView removeFromSuperview];
+            }
+            UIButton *btn = [[UIButton alloc] initWithFrame:CGRectMake(0, 0, width, 50)];
+            [btn setImage:[UIImage imageNamed:@"message"] forState:UIControlStateNormal];
+            btn.imageEdgeInsets = UIEdgeInsetsMake(0, 0, 0, 10);
+            [btn setTitle:WFCString(@"SendMessage") forState:UIControlStateNormal];
+            [btn setTitleColor:[WFCUConfigManager globalManager].textColor forState:UIControlStateNormal];
+            btn.titleLabel.font = [UIFont pingFangSCWithWeight:FontWeightStyleMedium size:16];
+            [btn addTarget:self action:@selector(onSendMessageBtn:) forControlEvents:UIControlEventTouchDown];
+            if (@available(iOS 14, *)) {
+                [self.sendMessageCell.contentView addSubview:btn];
+            } else {
+                [self.sendMessageCell addSubview:btn];
+            }
+            [self showSeparatorLine:self.sendMessageCell];
+            
+    #if WFCU_SUPPORT_VOIP
+            self.voipCallCell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:@"cell"];
+            for (UIView *subView in self.voipCallCell.subviews) {
+                [subView removeFromSuperview];
+            }
+            btn = [[UIButton alloc] initWithFrame:CGRectMake(0, 0, width, 50)];
+            [btn setImage:[UIImage imageNamed:@"video"] forState:UIControlStateNormal];
+            btn.imageEdgeInsets = UIEdgeInsetsMake(0, 0, 0, 10);
+            [btn setTitle:WFCString(@"VOIPCall") forState:UIControlStateNormal];
+            [btn addTarget:self action:@selector(onVoipCallBtn:) forControlEvents:UIControlEventTouchDown];
+            [btn setTitleColor:[UIColor colorWithHexString:@"0x5b6e8e"] forState:UIControlStateNormal];
+            btn.titleLabel.font = [UIFont pingFangSCWithWeight:FontWeightStyleMedium size:16];
+            if (@available(iOS 14, *)) {
+                [self.voipCallCell.contentView addSubview:btn];
+            } else {
+                [self.voipCallCell addSubview:btn];
+            }
+    #endif
+        } else if([[WFCCNetworkService sharedInstance].userId isEqualToString:self.userId]) {
+            
+        } else {
+            self.addFriendCell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:@"cell"];
+            for (UIView *subView in self.addFriendCell.subviews) {
+                [subView removeFromSuperview];
+            }
+            UIButton *btn = [[UIButton alloc] initWithFrame:CGRectMake(20, 8, width - 40, 40)];
+            [btn setTitle:WFCString(@"AddFriend") forState:UIControlStateNormal];
+            [btn setBackgroundColor:[UIColor greenColor]];
+            [btn addTarget:self action:@selector(onAddFriendBtn:) forControlEvents:UIControlEventTouchDown];
+            btn.layer.cornerRadius = 5.f;
+            btn.layer.masksToBounds = YES;
+            if (@available(iOS 14, *)) {
+                [self.addFriendCell.contentView addSubview:btn];
+            } else {
+                [self.addFriendCell addSubview:btn];
+            }
+            
+        }
     }
     [self.tableView reloadData];
 }
@@ -402,7 +534,10 @@
         return self.cells.count;
     } else {
         if (self.sendMessageCell) {
-            return 2;
+            if (self.voipCallCell) {
+                return 2;
+            }
+            return 1;
         } else {
             return 1;
         }
@@ -434,6 +569,8 @@
     if (self.sendMessageCell || self.voipCallCell || self.addFriendCell) {
         return 4;
     } else {
+        if(self.cells.count > 0)
+            return 3;
         return 2;
     }
 }
@@ -488,7 +625,6 @@
     }
 }
 
-#pragma mark -  UIActionSheetDelegate <NSObject>
 - (void)setFriendNote {
     WFCUGeneralModifyViewController *gmvc = [[WFCUGeneralModifyViewController alloc] init];
     NSString *previousAlias = [[WFCCIMService sharedWFCIMService] getFriendAlias:self.userId];
@@ -545,92 +681,7 @@
         });
     }];
 }
-- (void)actionSheet:(UIActionSheet *)actionSheet clickedButtonAtIndex:(NSInteger)buttonIndex {
-    if(buttonIndex == 0) {// friend
-        if ([[WFCCIMService sharedWFCIMService] isMyFriend:self.userId]) {
-            MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:self.view animated:YES];
-            hud.label.text = @"处理中...";
-            [hud showAnimated:YES];
-            
-            [[WFCCIMService sharedWFCIMService] deleteFriend:self.userId success:^{
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    [hud hideAnimated:YES];
 
-                    MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:self.view animated:YES];
-                    hud.mode = MBProgressHUDModeText;
-                    hud.label.text = @"处理成功";
-                    hud.offset = CGPointMake(0.f, MBProgressMaxOffset);
-                    [hud hideAnimated:YES afterDelay:1.f];
-                });
-            } error:^(int error_code) {
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    [hud hideAnimated:YES];
-
-                    MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:self.view animated:YES];
-                    hud.mode = MBProgressHUDModeText;
-                    hud.label.text = @"处理失败";
-                    hud.offset = CGPointMake(0.f, MBProgressMaxOffset);
-                    [hud hideAnimated:YES afterDelay:1.f];
-                });
-            }];
-        } else {
-            WFCUVerifyRequestViewController *vc = [[WFCUVerifyRequestViewController alloc] init];
-            vc.userId = self.userId;
-            [self.navigationController pushViewController:vc animated:YES];
-        }
-    } else if(buttonIndex == 1) {// blacklist
-        if ([[WFCCIMService sharedWFCIMService] isBlackListed:self.userId]) {
-            //0 取消屏蔽
-            MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:self.view animated:YES];
-            hud.label.text = @"处理中...";
-            [hud showAnimated:YES];
-            
-            [[WFCCIMService sharedWFCIMService] setBlackList:self.userId isBlackListed:NO success:^{
-                [hud hideAnimated:YES];
-
-                MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:self.view animated:YES];
-                hud.mode = MBProgressHUDModeText;
-                hud.label.text = @"处理成功";
-                hud.offset = CGPointMake(0.f, MBProgressMaxOffset);
-                [hud hideAnimated:YES afterDelay:1.f];
-            } error:^(int error_code) {
-                [hud hideAnimated:YES];
-
-                MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:self.view animated:YES];
-                hud.mode = MBProgressHUDModeText;
-                hud.label.text = @"处理失败";
-                hud.offset = CGPointMake(0.f, MBProgressMaxOffset);
-                [hud hideAnimated:YES afterDelay:1.f];
-            }];
-        } else {
-            MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:self.view animated:YES];
-            hud.label.text = @"处理中...";
-            [hud showAnimated:YES];
-            
-            [[WFCCIMService sharedWFCIMService] setBlackList:self.userId isBlackListed:YES success:^{
-                [hud hideAnimated:YES];
-
-                MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:self.view animated:YES];
-                hud.mode = MBProgressHUDModeText;
-                hud.label.text = @"处理成功";
-                hud.offset = CGPointMake(0.f, MBProgressMaxOffset);
-                [hud hideAnimated:YES afterDelay:1.f];
-            } error:^(int error_code) {
-                [hud hideAnimated:YES];
-
-                MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:self.view animated:YES];
-                hud.mode = MBProgressHUDModeText;
-                hud.label.text = @"处理失败";
-                hud.offset = CGPointMake(0.f, MBProgressMaxOffset);
-                [hud hideAnimated:YES afterDelay:1.f];
-            }];
-        }
-    } else if(buttonIndex == 2) {// alias
-        [self setFriendNote];
-    } else if(buttonIndex == 3) {// fav
-        [self setFavUser];
-    }
-}
 
 - (void)dealloc {
     [[NSNotificationCenter defaultCenter] removeObserver:self];

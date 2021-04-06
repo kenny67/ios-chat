@@ -93,12 +93,12 @@ public:
     void*       user_context;  // user
     std::string report_arg;  // user for cgi report
     
-    std::vector<std::string> shortlink_host_list;
+    std::vector<std::pair<std::string, int>> shortlink_host_list;
     virtual ~Task(){}
     virtual const std::string description() const;
 
     std::map<std::string, std::string> headers;
-	std::vector<std::string> longlink_host_list;
+	std::vector<std::pair<std::string, int>> longlink_host_list;
     bool isRoute;
     bool isUpload;
     int  uploadSize;
@@ -263,6 +263,7 @@ extern std::string GetDecodeData(std::string data);
     
 //获取Host
 extern std::string GetHost();
+extern std::string GetHostEx();
 //底层询问上层http网络检查的域名列表 
 extern void (*RequestNetCheckShortLinkHosts)(std::vector<std::string>& _hostlist);
 //底层向上层上报cgi执行结果 

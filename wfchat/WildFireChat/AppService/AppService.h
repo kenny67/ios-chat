@@ -42,6 +42,10 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)delDevice:(NSString *)deviceId
           success:(void(^)(Device *device))successBlock
             error:(void(^)(int error_code))errorBlock;
+
+- (NSData *)getAppServiceCookies;
+
+- (void)clearAppServiceCookies;
 @end
 
 NS_ASSUME_NONNULL_END

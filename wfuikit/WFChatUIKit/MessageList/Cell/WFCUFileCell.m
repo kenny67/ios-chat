@@ -8,6 +8,7 @@
 
 #import "WFCUFileCell.h"
 #import <WFChatClient/WFCChatClient.h>
+#import "WFCUUtilities.h"
 
 @implementation WFCUFileCell
 + (CGSize)sizeForClientArea:(WFCUMessageModel *)msgModel withViewWidth:(CGFloat)width {
@@ -20,23 +21,7 @@
     WFCCFileMessageContent *fileContent = (WFCCFileMessageContent *)model.message.content;
     
     NSString *ext = [[fileContent.name pathExtension] lowercaseString];
-    NSString *fileImage = nil;
-    if ([ext isEqualToString:@"doc"] || [ext isEqualToString:@"docx"] || [ext isEqualToString:@"pages"]) {
-        fileImage = @"doc_image";
-    } else if ([ext isEqualToString:@"xls"] || [ext isEqualToString:@"xlsx"] || [ext isEqualToString:@"numbers"]) {
-        fileImage = @"xls_image";
-    } else if ([ext isEqualToString:@"ppt"] || [ext isEqualToString:@"pptx"] || [ext isEqualToString:@"keynote"]) {
-        fileImage = @"ppt_image";
-    } else if ([ext isEqualToString:@"pdf"]) {
-        fileImage = @"pdf_image";
-    } else if([ext isEqualToString:@"html"] || [ext isEqualToString:@"htm"]) {
-        fileImage = @"html_image";
-    } else if([ext isEqualToString:@"txt"]) {
-        fileImage = @"txt_image";
-    } else if([ext isEqualToString:@"jpg"] || [ext isEqualToString:@"png"]) {
-        fileImage = @"img_image";
-    }
-    fileImage = @"file";
+    
     
     CGRect bounds = self.contentArea.bounds;
     if (model.message.direction == MessageDirection_Send) {
@@ -51,16 +36,9 @@
         self.sizeLabel.textAlignment = NSTextAlignmentRight;
     }
     
-    self.fileImageView.image = [UIImage imageNamed:fileImage];
+    self.fileImageView.image = [WFCUUtilities imageForExt:ext];
     self.fileNameLabel.text = fileContent.name;
-    if (fileContent.size < 1024) {
-        self.sizeLabel.text = [NSString stringWithFormat:@"%ldB", fileContent.size];
-    } else if(fileContent.size < 1024*1024) {
-        self.sizeLabel.text = [NSString stringWithFormat:@"%ldK", fileContent.size/1024];
-    } else {
-        self.sizeLabel.text = [NSString stringWithFormat:@"%.2fM", fileContent.size/1024.f/1024];
-    }
-    
+    self.sizeLabel.text = [WFCUUtilities formatSizeLable:fileContent.size];
 }
 
 - (UIImageView *)fileImageView {

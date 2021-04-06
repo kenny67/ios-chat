@@ -19,6 +19,8 @@
 #import "WFCUContactListViewController.h"
 #import "WFCUConfigManager.h"
 #import "UIImage+ERCategory.h"
+#import <WFChatClient/WFCChatClient.h>
+
 
 @interface WFCUForwardViewController () <UITableViewDataSource, UISearchControllerDelegate, UITableViewDelegate, UITableViewDataSource, UISearchResultsUpdating>
 @property (nonatomic, strong)UITableView *tableView;
@@ -89,6 +91,7 @@
     
     shareView.conversation = conversation;
     shareView.message = self.message;
+    shareView.messages = self.messages;
     __weak typeof(self)ws = self;
     shareView.forwardDone = ^(BOOL success) {
         if (success) {

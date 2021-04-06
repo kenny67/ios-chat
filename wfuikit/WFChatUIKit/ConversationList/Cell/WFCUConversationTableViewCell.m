@@ -77,7 +77,7 @@
         [self.potraitView setImage:[UIImage imageNamed:@"group_default_portrait"]];
         
         
-        NSString *path = [WFCCUtilities getGroupGridPortrait:groupInfo.target width:80 defaultUserPortrait:^UIImage *(NSString *userId) {
+        NSString *path = [WFCCUtilities getGroupGridPortrait:groupInfo.target width:80 generateIfNotExist:YES defaultUserPortrait:^UIImage *(NSString *userId) {
             return [UIImage imageNamed:@"PersonalChat"];
         }];
         
@@ -217,18 +217,16 @@
                                                                      error:&__error];
         
         BOOL hasMentionInfo = NO;
-        NSString *text = nil;
+        NSString *text = _info.draft;
         if (!__error) {
-            if (dictionary[@"text"] != nil && [dictionary[@"mentions"] isKindOfClass:[NSArray class]]) {
+            if ([dictionary[@"mentions"] isKindOfClass:[NSArray class]] || [dictionary[@"quote"] isKindOfClass:[NSDictionary class]]) {
                 hasMentionInfo = YES;
                 text = dictionary[@"text"];
             }
         }
-        if (text != nil) {
-            [attString appendAttributedString:[[NSAttributedString alloc] initWithString:text]];
-        } else {
-            [attString appendAttributedString:[[NSAttributedString alloc] initWithString:_info.draft]];
-        }
+        
+        [attString appendAttributedString:[[NSAttributedString alloc] initWithString:text]];
+
         if (_info.conversation.type == Group_Type && _info.unreadCount.unreadMentionAll + _info.unreadCount.unreadMention > 0) {
             NSMutableAttributedString *tmp = [[NSMutableAttributedString alloc] initWithString:WFCString(@"[MentionYou]") attributes:@{NSForegroundColorAttributeName : [UIColor redColor]}];
             [tmp appendAttributedString:attString];

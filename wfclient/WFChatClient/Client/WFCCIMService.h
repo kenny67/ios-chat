@@ -31,6 +31,7 @@ extern NSString *kRecallMessages;
 extern NSString *kDeleteMessages;
 extern NSString *kMessageDelivered;
 extern NSString *kMessageReaded;
+extern NSString *kMessageUpdated;
 
 #pragma mark - 枚举值定义
 /**
@@ -117,6 +118,18 @@ typedef NS_ENUM(NSInteger, UserSettingScope) {
     UserSettingScope_DisableRecipt = 13,
     //不能直接使用
     UserSettingScope_Favourite_User = 14,
+    //不能直接使用
+    UserSettingScope_Mute_When_PC_Online = 15,
+    //不能直接使用
+    UserSettingScope_Lines_Readed = 16,
+    //不能直接使用
+    UserSettingScope_No_Disturbing = 17,
+    //不能直接使用，协议栈内会使用此值
+    UserSettingScope_Conversation_Clear_Message = 18,
+    //不能直接使用，协议栈内会使用此值
+    UserSettingScope_Conversation_Draft = 19,
+    //不能直接使用，协议栈内会使用此值
+    UserSettingScope_Disable_Sync_Draft = 20,
     
     
     //自定义用户设置，请使用1000以上的key
@@ -146,8 +159,8 @@ typedef NS_ENUM(NSInteger, WFCCPlatformType) {
     PlatformType_Windows = 3,
     PlatformType_OSX = 4,
     PlatformType_WEB = 5,
-    Platform_WX = 6,
-    Platform_Linux = 7
+    PlatformType_WX = 6,
+    PlatformType_Linux = 7
 } ;
 
 #pragma mark - 用户源
@@ -279,6 +292,26 @@ typedef NS_ENUM(NSInteger, WFCCPlatformType) {
 - (void)setConversation:(WFCCConversation *)conversation
               timestamp:(long long)timestamp;
 
+/**
+ 获取会话列表第一条未读消息Id
+ 
+ @param conversation 会话
+ 
+ @return 会话中最早一条未读消息Id
+ */
+- (long)getFirstUnreadMessageId:(WFCCConversation *)conversation;
+
+/**
+ 清除远端会话消息，仅专业版支持。
+ 
+ @param conversation 会话
+ @param successBlock 删除成功
+ @param errorBlock 删除失败
+ */
+- (void)clearRemoteConversationMessage:(WFCCConversation *)conversation
+                               success:(void(^)(void))successBlock
+                                 error:(void(^)(int error_code))errorBlock;
+
 #pragma mark - 未读数相关
 /**
  获取指定类型会话的未读数
@@ -299,7 +332,7 @@ typedef NS_ENUM(NSInteger, WFCCPlatformType) {
 - (WFCCUnreadCount *)getUnreadCount:(WFCCConversation *)conversation;
 
 /**
- 清空会话未读数
+ 清空会话未读数。
  
  @param conversation 会话
  */
@@ -315,9 +348,17 @@ typedef NS_ENUM(NSInteger, WFCCPlatformType) {
                               lines:(NSArray<NSNumber *> *)lines;
 
 /**
- 清空所有会话的未读数
+ 清空所有会话的未读数。仅清理本地消息的未读数，没有同步到其他端，如果多端使用，请避免使用此方法
  */
-- (void)clearAllUnreadStatus;
+- (void)clearAllUnreadStatus DEPRECATED_MSG_ATTRIBUTE("use clearUnreadStatus:lines: instead");
+
+/**
+ 清空消息未读。
+ 
+ @param messageId 消息ID
+ @discuss 这个函数只能清除本地的状态，不能同步到服务器或者其他端。建议一般情况下不要用这个接口。
+ */
+- (void)clearMessageUnreadStatus:(long)messageId;
 
 /**
  设置媒体消息已播放（已经放开限制，所有消息都可以设置为已读状态）
@@ -407,6 +448,22 @@ typedef NS_ENUM(NSInteger, WFCCPlatformType) {
                                   lines:(NSArray<NSNumber *> *)lines
                           messageStatus:(NSArray<NSNumber *> *)messageStatus
                                    from:(NSUInteger)fromIndex
+                                  count:(NSInteger)count
+                               withUser:(NSString *)user;
+
+/**
+ 获取消息
+ @discuss 获取从fromTime起count条旧的消息。如果想要获取比fromIndex新的消息，count传负值。
+ 
+ @param conversation 会话
+ @param contentTypes 消息类型
+ @param fromTime 起始index
+ @param count 总数
+ @return 消息实体
+ */
+- (NSArray<WFCCMessage *> *)getMessages:(WFCCConversation *)conversation
+                           contentTypes:(NSArray<NSNumber *> *)contentTypes
+                               fromTime:(NSUInteger)fromTime
                                   count:(NSInteger)count
                                withUser:(NSString *)user;
 
@@ -670,6 +727,27 @@ typedef NS_ENUM(NSInteger, WFCCPlatformType) {
                 success:(void(^)(NSString *remoteUrl))successBlock
                progress:(void(^)(long uploaded, long total))progressBlock
                   error:(void(^)(int error_code))errorBlock;
+
+/**
+ 获取上传接口，用来上传大文件。只有专业版才支持，使用前先调用isSupportBigFilesUpload检查是否支持
+ 
+ @param fileName 文件名
+ @param mediaType 媒体类型
+ @param successBlock 成功的回调
+ @param errorBlock 失败的回调
+ */
+- (void)getUploadUrl:(NSString *)fileName
+           mediaType:(WFCCMediaType)mediaType
+            success:(void(^)(NSString *uploadUrl, NSString *downloadUrl, NSString *backupUploadUrl, int type))successBlock
+              error:(void(^)(int error_code))errorBlock;
+
+/**
+ 是否支持大文件上传
+ 
+ @return YES支持大文件上传，调用getUploadUrl:getUploadUrl:success:error:方法获取到上传url，然后再在应用层上传。
+ */
+- (BOOL)isSupportBigFilesUpload;
+
 /**
  删除消息
  
@@ -677,6 +755,17 @@ typedef NS_ENUM(NSInteger, WFCCPlatformType) {
  @return 是否删除成功
  */
 - (BOOL)deleteMessage:(long)messageId;
+
+/**
+ 删除远端消息，仅专业版支持。
+ 
+ @param messageUid 消息UID
+ @param successBlock 删除成功
+ @param errorBlock 删除失败
+ */
+- (void)deleteRemoteMessage:(long long)messageUid
+                    success:(void(^)(void))successBlock
+                      error:(void(^)(int error_code))errorBlock;
 
 /**
  删除会话中的消息
@@ -735,6 +824,17 @@ typedef NS_ENUM(NSInteger, WFCCPlatformType) {
               content:(WFCCMessageContent *)content;
 
 /**
+ 更新消息内容及时间。只更新本地消息内容，无法更新服务器和远端。
+ 
+ @param messageId 消息ID
+ @param content   消息内容
+ @param timestamp 消息时间戳
+ */
+- (void)updateMessage:(long)messageId
+              content:(WFCCMessageContent *)content
+            timestamp:(long long)timestamp;
+
+/**
 更新消息状态，需要确保状态跟消息的方向相对应。一般情况下协议栈会自动处理好，不建议客户手动操作状态。。只更新本地消息内容，无法更新服务器和远端。
 
 @param messageId 消息ID
@@ -742,7 +842,7 @@ typedef NS_ENUM(NSInteger, WFCCPlatformType) {
  
 @return YES 更新成功。NO 消息不存在，或者状态与消息方向不匹配
 */
-- (bool)updateMessage:(long)messageId status:(WFCCMessageStatus)status;
+- (BOOL)updateMessage:(long)messageId status:(WFCCMessageStatus)status;
 
 /**
  插入消息。只插入到本地，无法更新服务器和远端。
@@ -980,7 +1080,7 @@ typedef NS_ENUM(NSInteger, WFCCPlatformType) {
  根据成员类型获取群成员信息
  
  @param groupId 群ID
- @param type 群成员类型
+ @param memberType 群成员类型
  @return 群成员信息列表
  */
 - (NSArray<WFCCGroupMember *> *)getGroupMembers:(NSString *)groupId
@@ -1137,7 +1237,7 @@ typedef NS_ENUM(NSInteger, WFCCPlatformType) {
                   error:(void(^)(int error_code))errorBlock;
 
 /**
- 修改群昵称
+ 修改自己的群昵称
 
  @param groupId 群ID
  @param newAlias 昵称
@@ -1152,6 +1252,24 @@ typedef NS_ENUM(NSInteger, WFCCPlatformType) {
            notifyContent:(WFCCMessageContent *)notifyContent
                  success:(void(^)(void))successBlock
                    error:(void(^)(int error_code))errorBlock;
+
+/**
+ 修改群成员的昵称，群主可以修改所有人，群管理员可以修改普通成员的群昵称
+
+ @param groupId 群ID
+ @param newAlias 昵称
+ @param notifyLines 默认传 @[@(0)]
+ @param notifyContent 通知消息
+ @param successBlock 成功的回调
+ @param errorBlock 失败的回调
+ */
+- (void)modifyGroupMemberAlias:(NSString *)groupId
+                      memberId:(NSString *)memberId
+                         alias:(NSString *)newAlias
+                   notifyLines:(NSArray<NSNumber *> *)notifyLines
+                 notifyContent:(WFCCMessageContent *)notifyContent
+                       success:(void(^)(void))successBlock
+                         error:(void(^)(int error_code))errorBlock;
 
 /**
  转移群主
@@ -1302,18 +1420,67 @@ typedef NS_ENUM(NSInteger, WFCCPlatformType) {
 
 @return YES，当前用户全局静音；NO，没有全局静音
 */
-- (BOOL)isGlobalSlient;
+- (BOOL)isGlobalSilent;
 
 /**
 修改全局静音状态
 
-@param slient 是否静音
+@param silent 是否静音
 @param successBlock 成功的回调
 @param errorBlock 失败的回调
 */
-- (void)setGlobalSlient:(BOOL)slient
+- (void)setGlobalSilent:(BOOL)silent
                 success:(void(^)(void))successBlock
                   error:(void(^)(int error_code))errorBlock;
+
+/**
+是否开启草稿同步
+
+@return YES，同步；NO，不同步
+*/
+- (BOOL)isEnableSyncDraft;
+
+/**
+修改是否开启草稿同步
+
+@param enable 是否同步
+@param successBlock 成功的回调
+@param errorBlock 失败的回调
+*/
+- (void)setEnableSyncDraft:(BOOL)enable
+                   success:(void(^)(void))successBlock
+                     error:(void(^)(int error_code))errorBlock;
+
+/**
+获取免打扰时间
+
+ @param resultBlock 免打扰时间回调，时间为UTC 0点开始的分钟数，需要转换成当地时间。
+ @param errorBlock 不存在时调用，error_code为-1
+*/
+- (void)getNoDisturbingTimes:(void(^)(int startMins, int endMins))resultBlock
+                       error:(void(^)(int error_code))errorBlock;
+
+/**
+修改免打扰时间
+
+@param startMins 起始时间，一天中的分钟数，时间为UTC，需要转换成当地时间。
+@param endMins 结束时间，一天中的分钟数。可以小于startMins，如果小于表示隔夜。
+@param successBlock 成功的回调
+@param errorBlock 失败的回调
+*/
+- (void)setNoDisturbingTimes:(int)startMins
+                     endMins:(int)endMins
+                     success:(void(^)(void))successBlock
+                       error:(void(^)(int error_code))errorBlock;
+
+/**
+取消免打扰时间
+
+@param successBlock 成功的回调
+@param errorBlock 失败的回调
+*/
+- (void)clearNoDisturbingTimes:(void(^)(void))successBlock
+                         error:(void(^)(int error_code))errorBlock;
 
 /**
 是否隐藏推送详情
@@ -1369,6 +1536,8 @@ typedef NS_ENUM(NSInteger, WFCCPlatformType) {
 - (void)setUserEnableReceipt:(BOOL)enable
                 success:(void(^)(void))successBlock
                        error:(void(^)(int error_code))errorBlock;
+
+
 
 /**
  获取当前用户星标用户
@@ -1517,35 +1686,122 @@ typedef NS_ENUM(NSInteger, WFCCPlatformType) {
                 success:(void(^)(void))successBlock
                   error:(void(^)(int error_code))errorBlock;
 
+/**
+ PC/Web在线时，是否发送通知
 
+ @return 是否通知
+ */
+- (BOOL)isMuteNotificationWhenPcOnline;
+
+/**
+ 设置PC/Web在线时，是否发送通知
+
+ @param isMute 是否通知
+ @param successBlock 成功的回调
+ @param errorBlock 失败的回调
+ */
+- (void)muteNotificationWhenPcOnline:(BOOL)isMute
+                             success:(void(^)(void))successBlock
+                               error:(void(^)(int error_code))errorBlock;
+
+/**
+ 获取会话文件。conversation不为空时，获取该会话内的文件记录；当conversation为空时，获取用户收到的所有文件记录。
+
+ @param conversation 会话
+ @param fromUser 该用户发送的文件，如果为空返回所有文件
+ @param messageUid 起始记录的UID
+ @param count count
+ @param successBlock 成功的回调
+ @param errorBlock 失败的回调
+ */
 - (void)getConversationFiles:(WFCCConversation *)conversation
+                    fromUser:(NSString *)fromUser
             beforeMessageUid:(long long)messageUid
                        count:(int)count
                      success:(void(^)(NSArray<WFCCFileRecord *> *files))successBlock
                        error:(void(^)(int error_code))errorBlock;
 
+/**
+ 获取当前用户发送的文件。
+
+ @param beforeMessageUid 起始记录的UID
+ @param count count
+ @param successBlock 成功的回调
+ @param errorBlock 失败的回调
+ */
 - (void)getMyFiles:(long long)beforeMessageUid
              count:(int)count
            success:(void(^)(NSArray<WFCCFileRecord *> *files))successBlock
              error:(void(^)(int error_code))errorBlock;
 
+/**
+ 删除文件记录。发送者可以删除，另外如果在群里，群主和管理员也可以删除。
+
+ @param messageUid 起始记录的UID
+ @param successBlock 成功的回调
+ @param errorBlock 失败的回调
+ */
 - (void)deleteFileRecord:(long long)messageUid
                  success:(void(^)(void))successBlock
                    error:(void(^)(int error_code))errorBlock;
+
+/**
+ 搜索文件。conversation不为空时，搜索该会话内的文件记录；当conversation为空时，搜索用户收到的所有文件记录。
+
+ @param keyword 关键字
+ @param conversation 会话
+ @param fromUser 该用户发送的文件，如果为空返回所有文件
+ @param messageUid 起始记录的UID
+ @param count count
+ @param successBlock 成功的回调
+ @param errorBlock 失败的回调
+ */
+- (void)searchFiles:(NSString *)keyword
+       conversation:(WFCCConversation *)conversation
+           fromUser:(NSString *)fromUser
+   beforeMessageUid:(long long)messageUid
+              count:(int)count
+            success:(void(^)(NSArray<WFCCFileRecord *> *files))successBlock
+              error:(void(^)(int error_code))errorBlock;
+
+/**
+ 搜索当前用户发送的文件。
+
+ @param keyword 关键字
+ @param beforeMessageUid 起始记录的UID
+ @param count count
+ @param successBlock 成功的回调
+ @param errorBlock 失败的回调
+ */
+- (void)searchMyFiles:(NSString *)keyword
+     beforeMessageUid:(long long)beforeMessageUid
+                count:(int)count
+              success:(void(^)(NSArray<WFCCFileRecord *> *files))successBlock
+                error:(void(^)(int error_code))errorBlock;
+
 /**
 获取媒体文件授权访问地址
 
 @param messageUid 消息Uid
 @param mediaType 媒体类型
 @param mediaPath 媒体Path
-@param successBlock 成功的回调
+@param successBlock 成功的回调，backupAuthorizedUrl仅当支持双网环境才有意义
 @param errorBlock 失败的回调
 */
 - (void)getAuthorizedMediaUrl:(long long)messageUid
                     mediaType:(WFCCMediaType)mediaType
                     mediaPath:(NSString *)mediaPath
-                      success:(void(^)(NSString *authorizedUrl))successBlock
+                      success:(void(^)(NSString *authorizedUrl, NSString *backupAuthorizedUrl))successBlock
                         error:(void(^)(int error_code))errorBlock;
+
+/**
+amr文件转成wav数据
+
+@param amrPath amr文件路径
+@return wav数据
+*/
+- (NSData *)getWavData:(NSString *)amrPath;
+
 /**
  获取图片缩略图参数
  

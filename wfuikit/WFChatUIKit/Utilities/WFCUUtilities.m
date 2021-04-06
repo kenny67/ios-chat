@@ -223,4 +223,65 @@
         return originalImage;
     }
 }
+
++ (NSString *)formatSizeLable:(int64_t)size {
+    if (size < 1024) {
+        return [NSString stringWithFormat:@"%lldB", size];
+    } else if(size < 1024*1024) {
+        return [NSString stringWithFormat:@"%lldK", size/1024];
+    } else {
+        return [NSString stringWithFormat:@"%.2fM", size/1024.f/1024];
+    }
+}
++ (UIImage *)imageForExt:(NSString *)extName {
+    NSString *fileImage = nil;
+    if ([extName isEqualToString:@"doc"] || [extName isEqualToString:@"docx"] || [extName isEqualToString:@"pages"]) {
+        fileImage = @"file_type_word";
+    } else if ([extName isEqualToString:@"xls"] || [extName isEqualToString:@"xlsx"] || [extName isEqualToString:@"numbers"]) {
+        fileImage = @"file_type_xls";
+    } else if ([extName isEqualToString:@"ppt"] || [extName isEqualToString:@"pptx"] || [extName isEqualToString:@"keynote"]) {
+        fileImage = @"file_type_ppt";
+    } else if ([extName isEqualToString:@"pdf"]) {
+        fileImage = @"file_type_pdf";
+    } else if([extName isEqualToString:@"html"] || [extName isEqualToString:@"htm"]) {
+        fileImage = @"file_type_html";
+    } else if([extName isEqualToString:@"txt"]) {
+        fileImage = @"file_type_text";
+    } else if([extName isEqualToString:@"jpg"] || [extName isEqualToString:@"png"] || [extName isEqualToString:@"jpeg"]) {
+        fileImage = @"file_type_image";
+    } else if([extName isEqualToString:@"mp3"] || [extName isEqualToString:@"amr"] || [extName isEqualToString:@"acm"] || [extName isEqualToString:@"aif"]) {
+        fileImage = @"file_type_audio";
+    } else if([extName isEqualToString:@"mp4"] || [extName isEqualToString:@"avi"]
+              || [extName isEqualToString:@"mov"] || [extName isEqualToString:@"asf"]
+              || [extName isEqualToString:@"wmv"] || [extName isEqualToString:@"mpeg"]
+              || [extName isEqualToString:@"ogg"] || [extName isEqualToString:@"mkv"]
+              || [extName isEqualToString:@"rmvb"] || [extName isEqualToString:@"f4v"]) {
+        fileImage = @"file_type_video";
+    } else if([extName isEqualToString:@"exe"]) {
+        fileImage = @"file_type_exe";
+    } else if([extName isEqualToString:@"xml"]) {
+        fileImage = @"file_type_xml";
+    } else if([extName isEqualToString:@"zip"] || [extName isEqualToString:@"rar"]
+              || [extName isEqualToString:@"gzip"] || [extName isEqualToString:@"gz"]) {
+        fileImage = @"file_type_zip";
+    } else {
+        fileImage = @"file_type_unknown";
+    }
+    return [UIImage imageNamed:fileImage];
+}
+
++ (NSString *)getUnduplicatedPath:(NSString *)path {
+    int count = 1;
+    NSString *fileName = [path stringByDeletingPathExtension];
+    NSString *fileExt = [path pathExtension];
+    while ([[NSFileManager defaultManager] fileExistsAtPath:path]) {
+        path = [[NSString stringWithFormat:@"%@(%d)", fileName, count++] stringByAppendingPathExtension:fileExt];
+    }
+    
+    return path;
+}
+
++ (BOOL)isFileExist:(NSString *)filePath {
+    return [[NSFileManager defaultManager] fileExistsAtPath:filePath];
+}
 @end

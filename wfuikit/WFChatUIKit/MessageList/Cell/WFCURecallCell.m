@@ -28,7 +28,7 @@
     return digest;
 }
 + (CGSize)sizeForCell:(WFCUMessageModel *)msgModel withViewWidth:(CGFloat)width {
-    CGFloat height = [super hightForTimeLabel:msgModel];
+    CGFloat height = [super hightForHeaderArea:msgModel];
     NSString *infoText = [WFCURecallCell recallMsg:(WFCCRecallMessageContent *)msgModel.message.content];
     
     CGSize size = [WFCUUtilities getTextDrawingSize:infoText font:[UIFont systemFontOfSize:14] constrainedSize:CGSizeMake(width - TEXT_LABEL_LEFT_PADDING - TEXT_LABEL_RIGHT_PADDING - TEXT_LEFT_PADDING - TEXT_RIGHT_PADDING, 8000)];
@@ -101,7 +101,7 @@
 - (UIButton *)reeditButton {
     if (!_reeditButton) {
         _reeditButton = [[UIButton alloc] init];
-        [_reeditButton setTitle:@"重新编辑" forState:UIControlStateNormal];
+        [_reeditButton setTitle:WFCString(@"重新编辑") forState:UIControlStateNormal];
         [_reeditButton setTitleColor:[UIColor blueColor] forState:UIControlStateNormal];
         [_reeditButton setTitleColor:[UIColor grayColor] forState:UIControlStateSelected];
         [_reeditButton addTarget:self action:@selector(onReeditBtn:) forControlEvents:UIControlEventTouchDown];

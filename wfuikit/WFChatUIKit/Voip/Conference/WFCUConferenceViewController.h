@@ -15,9 +15,9 @@
 - (instancetype)initWithSession:(WFAVCallSession *)session;
 - (instancetype)initWithInvite:(WFCCConferenceInviteMessageContent *)invite;
 
-- (instancetype)initWithCallId:(NSString *_Nonnull)callId
+- (instancetype)initWithCallId:(NSString *_Nullable)callId
                      audioOnly:(BOOL)audioOnly
-                           pin:(NSString *_Nonnull)pin
+                           pin:(NSString *_Nullable)pin
                           host:(NSString *_Nullable)host
                          title:(NSString *_Nullable)title
                           desc:(NSString *_Nullable)desc

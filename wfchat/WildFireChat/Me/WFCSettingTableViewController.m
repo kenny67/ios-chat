@@ -18,6 +18,9 @@
 #import "UIColor+YH.h"
 #import "UIFont+YH.h"
 #import "WFCThemeTableViewController.h"
+#import "AppService.h"
+
+
 @interface WFCSettingTableViewController () <UITableViewDataSource, UITableViewDelegate>
 @property (nonatomic, strong)UITableView *tableView;
 @end
@@ -224,7 +227,7 @@
         }
     } else if (indexPath.section == 5) {
         [self hiddenSeparatorLine:cell];
-        cell.textLabel.text = LocalizedString(@"Diagnose");
+        cell.textLabel.text = WFCString(@"Diagnose");
     } else if (indexPath.section == 6) {
         cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:@"buttonCell"];
         for (UIView *subView in cell.subviews) {
@@ -237,7 +240,11 @@
         [btn setTitleColor:[UIColor colorWithHexString:@"0xf95569"]
                   forState:UIControlStateNormal];
         [btn addTarget:self action:@selector(onLogoutBtn:) forControlEvents:UIControlEventTouchUpInside];
-        [cell.contentView addSubview:btn];
+        if (@available(iOS 14, *)) {
+            [cell.contentView addSubview:btn];
+        } else {
+            [cell addSubview:btn];
+        }
     }
     
     return cell;
@@ -247,6 +254,9 @@
     [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"savedName"];
     [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"savedToken"];
     [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"savedUserId"];
+    [[NSUserDefaults standardUserDefaults] synchronize];
+    [[AppService sharedAppService] clearAppServiceCookies];
+    
     //退出后就不需要推送了，第一个参数为YES
     //如果希望再次登录时能够保留历史记录，第二个参数为NO。如果需要清除掉本地历史记录第二个参数用YES
     [[WFCCNetworkService sharedInstance] disconnect:YES clearSession:NO];

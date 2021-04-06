@@ -19,7 +19,7 @@
 #import "WFCUProfileTableViewController.h"
 #import "GroupManageTableViewController.h"
 #import "WFCUGroupMemberCollectionViewController.h"
-#import "WFCUGroupFilesViewController.h"
+#import "WFCUFilesViewController.h"
 
 #import "MBProgressHUD.h"
 #import "WFCUMyProfileTableViewController.h"
@@ -479,8 +479,10 @@
     return NO;
 }
 
-- (BOOL)isGroupFileCell:(NSIndexPath *)indexPath {
+- (BOOL)isFilesCell:(NSIndexPath *)indexPath {
     if (self.conversation.type == Group_Type && indexPath.section == 1 && indexPath.row == 1) {
+        return YES;
+    } else if (self.conversation.type == Single_Type && indexPath.section == 0 && indexPath.row == 1) {
         return YES;
     }
     
@@ -517,6 +519,9 @@
         }
     } else if(self.conversation.type == Single_Type) {
         if(section == 0) {
+            if ([[WFCCIMService sharedWFCIMService] isCommercialServer]) {
+                return 2; //查找聊天内容, 群文件
+            }
             return 1; //查找聊天内容
         } else if(section == 1) {
             return 2; //消息免打扰，置顶聊天
@@ -664,7 +669,11 @@
           btn.titleLabel.font = [UIFont pingFangSCWithWeight:FontWeightStyleRegular size:16];
           [btn setTitleColor:[UIColor colorWithHexString:@"0xf95569"] forState:UIControlStateNormal];
           [btn addTarget:self action:@selector(clearMessageAction) forControlEvents:UIControlEventTouchUpInside];
-          [cell.contentView addSubview:btn];
+          if (@available(iOS 14, *)) {
+              [cell.contentView addSubview:btn];
+          } else {
+              [cell addSubview:btn];
+          }
       }
       return cell;
   } else if([self isQuitGroup:indexPath]) {
@@ -683,7 +692,11 @@
             btn.titleLabel.font = [UIFont pingFangSCWithWeight:FontWeightStyleRegular size:16];
             [btn setTitleColor:[UIColor colorWithHexString:@"0xf95569"] forState:UIControlStateNormal];
             [btn addTarget:self action:@selector(onDeleteAndQuit:) forControlEvents:UIControlEventTouchUpInside];
-            [cell.contentView addSubview:btn];
+            if (@available(iOS 14, *)) {
+                [cell.contentView addSubview:btn];
+            } else {
+                [cell addSubview:btn];
+            }
         }
         return cell;
   } else if([self isUnsubscribeChannel:indexPath]) {
@@ -705,11 +718,15 @@
           
           btn.backgroundColor = [UIColor redColor];
           [btn addTarget:self action:@selector(onDeleteAndQuit:) forControlEvents:UIControlEventTouchUpInside];
-          [cell.contentView addSubview:btn];
+          if (@available(iOS 14, *)) {
+              [cell.contentView addSubview:btn];
+          } else {
+              [cell addSubview:btn];
+          }
       }
       return cell;
-  } else if([self isGroupFileCell:indexPath]) {
-      return [self cellOfTable:tableView WithTitle:WFCString(@"GroupFiles") withDetailTitle:nil withDisclosureIndicator:YES withSwitch:NO withSwitchType:SwitchType_Conversation_None];
+  } else if([self isFilesCell:indexPath]) {
+      return [self cellOfTable:tableView WithTitle:WFCString(@"ConvFiles") withDetailTitle:nil withDisclosureIndicator:YES withSwitch:NO withSwitchType:SwitchType_Conversation_None];
   }
     return nil;
 }
@@ -807,8 +824,8 @@
       vc.announcement = self.groupAnnouncement;
       vc.isManager = [self isGroupManager];
       [self.navigationController pushViewController:vc animated:YES];
-  } else if([self isGroupFileCell:indexPath]) {
-      WFCUGroupFilesViewController *vc = [[WFCUGroupFilesViewController alloc] init];
+  } else if([self isFilesCell:indexPath]) {
+      WFCUFilesViewController *vc = [[WFCUFilesViewController alloc] init];
       vc.conversation = self.conversation;
       [self.navigationController pushViewController:vc animated:YES];
   }
