@@ -19,6 +19,7 @@
 #import <WFChatClient/WFCChatClient.h>
 #if WFCU_SUPPORT_VOIP
 #import <WFAVEngineKit/WFAVEngineKit.h>
+#import <WebRTC/WebRTC.h>
 #endif
 #import "WFCLoginViewController.h"
 #import "WFCConfig.h"
@@ -29,7 +30,6 @@
 #import "PCLoginConfirmViewController.h"
 #import "QQLBXScanViewController.h"
 #import "StyleDIY.h"
-#import "GroupInfoViewController.h"
 #import <Bugly/Bugly.h>
 #import "AppService.h"
 #import "UIColor+YH.h"
@@ -45,19 +45,26 @@
 @implementation AppDelegate
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
     //替换为您自己的Bugly账户。
-    [Bugly startWithAppId:@"b21375e023"];
+    [Bugly startWithAppId:@"6f54460b01"];
     
     [WFCCNetworkService startLog];
     [WFCCNetworkService sharedInstance].connectionStatusDelegate = self;
     [WFCCNetworkService sharedInstance].receiveMessageDelegate = self;
     [[WFCCNetworkService sharedInstance] setServerAddress:IM_SERVER_HOST];
     
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(onFriendRequestUpdated:) name:kFriendRequestUpdated object:nil];
+    
 #if WFCU_SUPPORT_VOIP
     [[WFAVEngineKit sharedEngineKit] addIceServer:ICE_ADDRESS userName:ICE_USERNAME password:ICE_PASSWORD];
     [[WFAVEngineKit sharedEngineKit] setVideoProfile:kWFAVVideoProfile360P swapWidthHeight:YES];
     [WFAVEngineKit sharedEngineKit].delegate = self;
-    [WFAVEngineKit sharedEngineKit].maxVideoCallCount = 4;
-    [WFAVEngineKit sharedEngineKit].maxAudioCallCount = 9;
+    
+    // 设置音视频参与者数量。多人音视频默认视频4路，音频9路，如果改成更多可能会导致问题；音视频高级版默认视频9路，音频16路。
+//    [WFAVEngineKit sharedEngineKit].maxVideoCallCount = 4;
+//    [WFAVEngineKit sharedEngineKit].maxAudioCallCount = 9;
+    
+    //音视频日志，当需要抓日志分析时可以打开这句话
+    //RTCSetMinDebugLogLevel(RTCLoggingSeverityInfo);
 #endif
     
     
@@ -166,7 +173,37 @@
 
 - (void)applicationWillTerminate:(UIApplication *)application {
     // Called when the application is about to terminate. Save data if appropriate. See also applicationDidEnterBackground:.
-    [WFCCNetworkService startLog];
+    [WFCCNetworkService stopLog];
+}
+
+- (void)onFriendRequestUpdated:(NSNotification *)notification {
+    if ([UIApplication sharedApplication].applicationState == UIApplicationStateBackground) {
+        NSArray<NSString *> *newRequests = notification.object;
+        
+        if (!newRequests.count) {
+            return;
+        }
+        
+        UILocalNotification *localNote = [[UILocalNotification alloc] init];
+        if (@available(iOS 8.2, *)) {
+            localNote.alertTitle = @"收到好友邀请";
+        }
+        
+        if (newRequests.count == 1) {
+            [[WFCCIMService sharedWFCIMService] getUserInfo:newRequests[0] refresh:NO success:^(WFCCUserInfo *userInfo) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    WFCCFriendRequest *request = [[WFCCIMService sharedWFCIMService] getFriendRequest:newRequests[0] direction:1];
+                    localNote.alertBody = [NSString stringWithFormat:@"%@:%@", userInfo.displayName, request.reason];
+                    [[UIApplication sharedApplication] scheduleLocalNotification:localNote];
+                });
+                        } error:^(int errorCode) {
+                            
+                        }];
+        } else if(newRequests.count > 1) {
+            localNote.alertBody = [NSString stringWithFormat:@"您收到 %ld 条好友请求", newRequests.count];
+            [[UIApplication sharedApplication] scheduleLocalNotification:localNote];
+        }
+    }
 }
 
 - (void)onReceiveMessage:(NSArray<WFCCMessage *> *)messages hasMore:(BOOL)hasMore {
@@ -235,6 +272,40 @@
             }
         }
         
+    } else if([UIApplication sharedApplication].applicationState == UIApplicationStateActive) {
+        WFCCPCLoginRequestMessageContent *pcLoginRequest;
+        for (WFCCMessage *msg in messages) {
+            if (([[NSDate date] timeIntervalSince1970] - (msg.serverTime - [WFCCNetworkService sharedInstance].serverDeltaTime)/1000) < 90) {
+                if ([msg.content isKindOfClass:[WFCCPCLoginRequestMessageContent class]]) {
+                    pcLoginRequest = (WFCCPCLoginRequestMessageContent *)msg.content;
+                }
+            }
+        }
+        if (pcLoginRequest) {
+            __block UINavigationController *nav;
+            if ([self.window.rootViewController isKindOfClass:[UINavigationController class]]) {
+                nav = (UINavigationController *)self.window.rootViewController;
+            } else if ([self.window.rootViewController isKindOfClass:[UITabBarController class]]) {
+                UITabBarController *tab = (UITabBarController *)self.window.rootViewController;
+                [tab.viewControllers enumerateObjectsUsingBlock:^(__kindof UIViewController * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
+                    if ([obj isKindOfClass:[UINavigationController class]]) {
+                        nav = obj;
+                        *stop = YES;
+                    }
+                }];
+            }
+            
+            if (nav) {
+                PCLoginConfirmViewController *vc2 = [[PCLoginConfirmViewController alloc] init];
+                vc2.sessionId = pcLoginRequest.sessionId;
+                vc2.platform = pcLoginRequest.platform;
+                vc2.modalPresentationStyle = UIModalPresentationFullScreen;
+                [self.window.rootViewController presentViewController:vc2 animated:YES completion:nil];
+            } else {
+                NSLog(@"怎么样才能模态弹出PC登录确认画面呢？");
+            }
+            
+        }
     }
 }
 
@@ -242,10 +313,18 @@
     dispatch_async(dispatch_get_main_queue(), ^{
         if (status == kConnectionStatusRejected || status == kConnectionStatusTokenIncorrect || status == kConnectionStatusSecretKeyMismatch) {
             [[WFCCNetworkService sharedInstance] disconnect:YES clearSession:YES];
+            
+            [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"savedToken"];
+            [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"savedUserId"];
+            [[NSUserDefaults standardUserDefaults] synchronize];
         } else if (status == kConnectionStatusLogout) {
             UIViewController *loginVC = [[WFCLoginViewController alloc] init];
             UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:loginVC];
             self.window.rootViewController = nav;
+            
+            [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"savedToken"];
+            [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"savedUserId"];
+            [[NSUserDefaults standardUserDefaults] synchronize];
         } 
     });
 }
@@ -271,17 +350,29 @@
         return YES;
     } else if ([str rangeOfString:@"wildfirechat://group" options:NSCaseInsensitiveSearch].location == 0) {
         NSString *groupId = [str lastPathComponent];
-        GroupInfoViewController *vc2 = [[GroupInfoViewController alloc] init];
+        WFCUGroupInfoViewController *vc2 = [[WFCUGroupInfoViewController alloc] init];
         vc2.groupId = groupId;
         vc2.hidesBottomBarWhenPushed = YES;
         [navigator pushViewController:vc2 animated:YES];
         return YES;
     } else if ([str rangeOfString:@"wildfirechat://pcsession" options:NSCaseInsensitiveSearch].location == 0) {
-        NSString *sessionId = [str lastPathComponent];
+//        str = @"wildfirechat://pcsession/mysessionid?platform=3";
+        NSURL *URL = [NSURL URLWithString:str];
+        
+        NSString *sessionId = [URL lastPathComponent];
+        NSMutableDictionary *params = [[NSMutableDictionary alloc]initWithCapacity:2];
+        NSURLComponents *urlComponents = [[NSURLComponents alloc] initWithString:str];
+        [urlComponents.queryItems enumerateObjectsUsingBlock:^(NSURLQueryItem * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
+            [params setObject:obj.value forKey:obj.name];
+        }];
+        int platform = [params[@"platform"] intValue];
+        
+        
         PCLoginConfirmViewController *vc2 = [[PCLoginConfirmViewController alloc] init];
         vc2.sessionId = sessionId;
-        vc2.hidesBottomBarWhenPushed = YES;
-        [navigator pushViewController:vc2 animated:YES];
+        vc2.platform = platform;
+        vc2.modalPresentationStyle = UIModalPresentationFullScreen;
+        [navigator presentViewController:vc2 animated:YES completion:nil];
         return YES;
     }
     return NO;
@@ -413,6 +504,7 @@ void systemAudioCallback (SystemSoundID soundID, void* clientData) {
     vc.scanResult = ^(NSString *str) {
         [ws handleUrl:str withNav:navigator];
     };
+    
     [navigator pushViewController:vc animated:YES];
 }
 @end

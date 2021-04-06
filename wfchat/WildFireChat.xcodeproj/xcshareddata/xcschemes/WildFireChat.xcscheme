@@ -15,7 +15,11 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "2E1D1FF61FAF0AE600F4405D"
+         
                BuildableName = "ToMe.app"
+
+               BuildableName_old = "&#x91ce;&#x706b;IM.app"
+
                BlueprintName = "WildFireChat"
                ReferencedContainer = "container:WildFireChat.xcodeproj">
             </BuildableReference>
@@ -31,7 +35,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "2E1D1FF61FAF0AE600F4405D"
+
             BuildableName = "ToMe.app"
+
             BlueprintName = "WildFireChat"
             ReferencedContainer = "container:WildFireChat.xcodeproj">
          </BuildableReference>
@@ -54,7 +60,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "2E1D1FF61FAF0AE600F4405D"
+
             BuildableName = "ToMe.app"
+
             BlueprintName = "WildFireChat"
             ReferencedContainer = "container:WildFireChat.xcodeproj">
          </BuildableReference>
@@ -71,7 +79,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "2E1D1FF61FAF0AE600F4405D"
+
             BuildableName = "ToMe.app"
+
             BlueprintName = "WildFireChat"
             ReferencedContainer = "container:WildFireChat.xcodeproj">
          </BuildableReference>
@@ -93,7 +103,9 @@
                   <BuildableReference
                      BuildableIdentifier = "primary"
                      BlueprintIdentifier = "2E1D1FF61FAF0AE600F4405D"
+
                      BuildableName = "ToMe.app"
+
                      BlueprintName = "WildFireChat"
                      ReferencedContainer = "container:WildFireChat.xcodeproj">
                   </BuildableReference>

@@ -16,7 +16,7 @@
 #import "WFCUFloatingWindow.h"
 #import "WFCUParticipantCollectionViewCell.h"
 #endif
-#import "SDWebImage.h"
+#import <SDWebImage/SDWebImage.h>
 #import <WFChatClient/WFCCConversation.h>
 #import "WFCUPortraitCollectionViewCell.h"
 #import "WFCUParticipantCollectionViewLayout.h"
@@ -135,8 +135,8 @@
     [super viewDidLoad];
     [self.view setBackgroundColor:[UIColor blackColor]];
     
-    self.smallScalingType = kWFAVVideoScalingTypeAspectFill;
-    self.bigScalingType = kWFAVVideoScalingTypeAspectBalanced;
+    self.smallScalingType = kWFAVVideoScalingTypeAspectFit;
+    self.bigScalingType = kWFAVVideoScalingTypeAspectFit;
     self.bigVideoView = [[UIView alloc] initWithFrame:self.view.bounds];
     UITapGestureRecognizer *tapBigVideo = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(onClickedBigVideoView:)];
     [self.bigVideoView addGestureRecognizer:tapBigVideo];
@@ -146,7 +146,8 @@
     CGFloat itemWidth = (self.view.frame.size.width + layout.minimumLineSpacing)/3 - layout.minimumLineSpacing;
     layout.itemSize = CGSizeMake(itemWidth, itemWidth);
     layout.scrollDirection = UICollectionViewScrollDirectionHorizontal;
-    self.smallCollectionView = [[UICollectionView alloc] initWithFrame:CGRectMake(0, kStatusBarAndNavigationBarHeight, self.view.frame.size.width, itemWidth) collectionViewLayout:layout];
+    int lines = ([self.currentSession participantIds].count + 2) /3;
+    self.smallCollectionView = [[UICollectionView alloc] initWithFrame:CGRectMake(0, kStatusBarAndNavigationBarHeight, self.view.frame.size.width, itemWidth*lines) collectionViewLayout:layout];
     
     self.smallCollectionView.dataSource = self;
     self.smallCollectionView.delegate = self;
@@ -519,40 +520,57 @@
 }
 
 - (BOOL)onDeviceOrientationDidChange{
+    if (self.currentSession.state == kWFAVEngineStateIdle) {
+        return YES;
+    }
     //获取当前设备Device
     UIDevice *device = [UIDevice currentDevice] ;
-
+    NSString *lastUser = nil;
     switch (device.orientation) {
         case UIDeviceOrientationFaceUp:
-            NSLog(@"屏幕幕朝上平躺");
             break;
 
         case UIDeviceOrientationFaceDown:
-            NSLog(@"屏幕朝下平躺");
             break;
 
         case UIDeviceOrientationUnknown:
             //系统当前无法识别设备朝向，可能是倾斜
-            NSLog(@"未知方向");
             break;
 
         case UIDeviceOrientationLandscapeLeft:
             self.bigVideoView.transform = CGAffineTransformMakeRotation(M_PI_2);
-            NSLog(@"屏幕向左橫置");
+            self.bigVideoView.frame = self.view.bounds;
+            lastUser = [self.participants lastObject];
+            if ([lastUser isEqualToString:[WFCCNetworkService sharedInstance].userId]) {
+                [self.currentSession setupLocalVideoView:self.bigVideoView scalingType:self.bigScalingType];
+            } else {
+                [self.currentSession setupRemoteVideoView:self.bigVideoView scalingType:self.bigScalingType forUser:lastUser];
+            }
             break;
 
         case UIDeviceOrientationLandscapeRight:
             self.bigVideoView.transform = CGAffineTransformMakeRotation(-M_PI_2);
-            NSLog(@"屏幕向右橫置");
+            self.bigVideoView.frame = self.view.bounds;
+            lastUser = [self.participants lastObject];
+            if ([lastUser isEqualToString:[WFCCNetworkService sharedInstance].userId]) {
+                [self.currentSession setupLocalVideoView:self.bigVideoView scalingType:self.bigScalingType];
+            } else {
+                [self.currentSession setupRemoteVideoView:self.bigVideoView scalingType:self.bigScalingType forUser:lastUser];
+            }
             break;
 
         case UIDeviceOrientationPortrait:
             self.bigVideoView.transform = CGAffineTransformMakeRotation(0);
-            NSLog(@"屏幕直立");
+            self.bigVideoView.frame = self.view.bounds;
+            lastUser = [self.participants lastObject];
+            if ([lastUser isEqualToString:[WFCCNetworkService sharedInstance].userId]) {
+                [self.currentSession setupLocalVideoView:self.bigVideoView scalingType:self.bigScalingType];
+            } else {
+                [self.currentSession setupRemoteVideoView:self.bigVideoView scalingType:self.bigScalingType forUser:lastUser];
+            }
             break;
 
         case UIDeviceOrientationPortraitUpsideDown:
-            NSLog(@"屏幕直立，上下顛倒");
             break;
 
         default:
